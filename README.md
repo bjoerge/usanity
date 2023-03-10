@@ -3,8 +3,8 @@
 
 ## Install
 
-## Use mip to install
 If you're connected to the REPL and connected to Wi-Fi, the easiest way to install is by running the following:
+
 ```python
 import mip
 mip.install("github:bjoerge/usanity")
