@@ -4,10 +4,10 @@
 ## Install
 
 ## Use mip to install
-
+If you're connected to the REPL and connected to Wi-Fi, the easiest way to install is by running the following: 
 ```python
 import mip
-mip.install("github:org/bjoerge/usanity")
+mip.install("github:bjoerge/usanity")
 ```
 
 More info about the MicroPython package manager and alternative ways to install here: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
