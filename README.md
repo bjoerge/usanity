@@ -1,5 +1,5 @@
 # µsanity
-[MicroPython](https://micropython.org/) for [Sanity.io](https://www.sanity.io/) 
+[MicroPython](https://micropython.org/) client for [Sanity.io](https://www.sanity.io/)
 
 ## Install
 
