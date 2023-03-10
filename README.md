@@ -1,6 +1,17 @@
 # µsanity
 [MicroPython](https://micropython.org/) for [Sanity.io](https://www.sanity.io/) 
 
+## Install
+
+## Use mip to install
+
+```python
+import mip
+mip.install("github:org/bjoerge/usanity")
+```
+
+More info about the MicroPython package manager and alternative ways to install here: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
+
 ## Usage examples
 
 ### Fetch a groq query
