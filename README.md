@@ -1,6 +1,17 @@
 # µsanity
 [MicroPython](https://micropython.org/) for [Sanity.io](https://www.sanity.io/) 
 
+## Install
+
+## Use mip to install
+If you're connected to the REPL and connected to Wi-Fi, the easiest way to install is by running the following:
+```python
+import mip
+mip.install("github:bjoerge/usanity")
+```
+
+More info about the MicroPython package manager and alternative ways to install here: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
+
 ## Usage examples
 
 ### Fetch a groq query

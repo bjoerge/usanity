@@ -1,0 +1,10 @@
+{
+  "urls": [
+    ["usanity/__init__.py", "github:bjoerge/usanity/__init__.py"],
+    ["usanity/mutations.py", "github:bjoerge/usanity/mutations.py"],
+    ["usanity/request.py", "github:bjoerge/usanity/request.py"],
+    ["usanity/utils.py", "github:bjoerge/usanity/utils.py"],
+    ["usanity/constants.py", "github:bjoerge/usanity/constants.py"]
+  ],
+  "version": "0.1"
+}
