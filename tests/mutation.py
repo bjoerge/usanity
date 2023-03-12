@@ -1,7 +1,7 @@
 from mutations import create_if_not_exists, patch, patch_set, insert, set_if_missing
 from request import mutate_request
 from tests.helpers import expect_equal
-from constants import USER_AGENT
+from meta import USER_AGENT
 
 
 def test_query_mutation():

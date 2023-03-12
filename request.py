@@ -1,4 +1,4 @@
-from constants import USER_AGENT
+from meta import USER_AGENT
 from utils import encode_uri_component, merge
 
 

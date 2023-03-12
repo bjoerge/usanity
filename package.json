@@ -4,7 +4,7 @@
     ["usanity/mutations.py", "github:bjoerge/usanity/mutations.py"],
     ["usanity/request.py", "github:bjoerge/usanity/request.py"],
     ["usanity/utils.py", "github:bjoerge/usanity/utils.py"],
-    ["usanity/constants.py", "github:bjoerge/usanity/constants.py"]
+    ["usanity/meta.py", "github:bjoerge/usanity/meta.py"]
   ],
   "version": "0.2"
 }
