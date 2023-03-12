@@ -1,5 +1,5 @@
-import request
-from tests.helpers import expect_equal
+from lib import request
+from test_helpers import expect_equal
 
 
 def test_query_use_cdn():

@@ -1,5 +1,5 @@
-from constants import USER_AGENT
-from utils import encode_uri_component, merge
+from .constants import USER_AGENT
+from .utils import encode_uri_component, merge
 
 
 def base_url(project_id: str, use_cdn: bool = False, api_host: str = None):
@@ -86,9 +86,7 @@ def mutate_request(
     dataset: str,
     api_version: str,
     token: str = None,
-    visibility: "async"
-    | "sync"
-    | "deferred" = None,  # default sync on the backend side
+    visibility: str = None,  # either "async", "sync" or "deferred". Default "sync" on the backend side
     return_documents: bool = False,
     return_ids: bool = False,
     dry_run: bool = False,
