@@ -86,9 +86,7 @@ def mutate_request(
     dataset: str,
     api_version: str,
     token: str = None,
-    visibility: "async"
-    | "sync"
-    | "deferred" = None,  # default sync on the backend side
+    visibility: str = None,  # either "async", "sync" or "deferred". Default "sync" on the backend side
     return_documents: bool = False,
     return_ids: bool = False,
     dry_run: bool = False,
