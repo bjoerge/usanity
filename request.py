@@ -1,6 +1,7 @@
-from meta import USER_AGENT
+from meta import get_user_agent
 from utils import encode_uri_component, merge
 
+USER_AGENT = get_user_agent()
 
 def base_url(project_id: str, use_cdn: bool = False, api_host: str = None):
     if api_host:
