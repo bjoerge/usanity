@@ -7,7 +7,7 @@ If you're connected to the REPL and connected to Wi-Fi, the easiest way to insta
 
 ```python
 import mip
-mip.install("github:bjoerge/lib")
+mip.install("github:bjoerge/usanity")
 ```
 
 More info about the MicroPython package manager and alternative ways to install here: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
@@ -18,7 +18,7 @@ More info about the MicroPython package manager and alternative ways to install 
 
 ```python
 import urequests
-from lib import query_request
+from usanity import query_request
 
 sensor_id = "temperature-xyz"
 
@@ -48,8 +48,8 @@ print(sensors)
 
 ```python
 import urequests
-from lib import mutate_request
-from lib.mutations import (
+from usanity import mutate_request
+from usanity.mutations import (
     create_if_not_exists,
     patch,
     patch_set,
