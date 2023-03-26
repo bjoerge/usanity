@@ -6,5 +6,5 @@
     ["usanity/utils.py", "github:bjoerge/usanity/lib/utils.py"],
     ["usanity/constants.py", "github:bjoerge/usanity/lib/constants.py"]
   ],
-  "version": "0.2"
+  "version": "0.4"
 }
