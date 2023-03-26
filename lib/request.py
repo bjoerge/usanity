@@ -1,5 +1,6 @@
 from .constants import USER_AGENT
-from .utils import encode_uri_component, merge
+from .utils import encode_uri_component
+from ucollections import OrderedDict
 
 
 def base_url(project_id: str, use_cdn: bool = False, api_host: str = None):
@@ -24,8 +25,18 @@ def doc_endpoint(api_version: str, dataset: str, document_ids: list):
     return versioned_path(api_version) + f"/data/doc/{dataset}/{','.join(document_ids)}"
 
 
+def serialize_variable(value):
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def variables_to_query_params(variables: dict = None, explain=False):
-    params = dict([(f"${name}", value) for (name, value) in variables.items()])
+    params = dict(
+        [(f"${name}", serialize_variable(value)) for (name, value) in variables.items()]
+    )
     if explain:
         params["explain"] = "true"
     return params
@@ -66,10 +77,20 @@ def query_request(
     api_host=None,
     params: dict = None,
 ):
-    qs = merge(
-        merge(params or {}, variables_to_query_params(variables or {})),
-        {"query": query},
+    for key in (params or {}).keys():
+        if key is "query":
+            raise Exception('Query parameters dictionary includes reserved key "query"')
+        if key[0] is "$":
+            raise Exception(
+                f'Query parameters dictionary can not include keys starting with "$" (found "{key}")'
+            )
+
+    qs = (
+        OrderedDict({"query": query})
+        | variables_to_query_params(variables or {})
+        | (params or {})
     )
+
     return (
         build_url(
             base_url(project_id, use_cdn, api_host),

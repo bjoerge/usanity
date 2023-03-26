@@ -1,14 +1,11 @@
-def merge(x: dict, y: dict):
-    z = x.copy()
-    z.update(y)
-    return z
-
-
 def encode_uri_component(uri_component: str):
     return "".join(
         [
             character
-            if character.isalpha() or character == "-" or character == "."
+            if character.isalpha()
+            or character.isdigit()
+            or character == "-"
+            or character == "."
             else "%" + hex(ord(character))[2:]
             for character in uri_component
         ]
