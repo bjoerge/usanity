@@ -119,34 +119,33 @@ class EventSource:
         self._read_until(b"\r\n\r\n")
 
     def _read_until(self, delimiter):
-        buf = self._buf
         while True:
-            idx = buf.find(delimiter)
+            idx = self._buf.find(delimiter)
             if idx >= 0:
-                result = bytes(buf[: idx + len(delimiter)])
-                del buf[: idx + len(delimiter)]
+                end = idx + len(delimiter)
+                result = bytes(self._buf[:end])
+                self._buf = self._buf[end:]
                 return result
             chunk = self._sock.read(512)
             if not chunk:
                 raise OSError("Connection closed")
-            buf.extend(chunk)
+            self._buf.extend(chunk)
 
     def _readline(self):
         """Read one line from the socket. Returns bytes (without line ending)."""
-        buf = self._buf
         while True:
-            idx = buf.find(b"\n")
+            idx = self._buf.find(b"\n")
             if idx >= 0:
                 end = idx
-                if end > 0 and buf[end - 1] == 0x0D:
+                if end > 0 and self._buf[end - 1] == 0x0D:
                     end -= 1
-                line = bytes(buf[:end])
-                del buf[: idx + 1]
+                line = bytes(self._buf[:end])
+                self._buf = self._buf[idx + 1 :]
                 return line
             chunk = self._sock.read(512)
             if not chunk:
                 raise OSError("Connection closed")
-            buf.extend(chunk)
+            self._buf.extend(chunk)
 
     def __iter__(self):
         return self
