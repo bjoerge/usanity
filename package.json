@@ -4,7 +4,8 @@
     ["usanity/mutations.py", "github:bjoerge/usanity/lib/mutations.py"],
     ["usanity/request.py", "github:bjoerge/usanity/lib/request.py"],
     ["usanity/utils.py", "github:bjoerge/usanity/lib/utils.py"],
-    ["usanity/constants.py", "github:bjoerge/usanity/lib/constants.py"]
+    ["usanity/constants.py", "github:bjoerge/usanity/lib/constants.py"],
+    ["usanity/eventsource.py", "github:bjoerge/usanity/lib/eventsource.py"]
   ],
   "version": "0.4"
 }
