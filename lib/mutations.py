@@ -58,7 +58,7 @@ def format_array_selector(item_selector: str | int):
 # e.g. insert("path.to.array", "before", -1, ["a", "b"])
 def insert(
     path: str,
-    position: "before" | "after" | "replace",
+    position: str,
     reference_selector: str | int,
     items: list,
 ):
