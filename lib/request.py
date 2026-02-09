@@ -1,6 +1,5 @@
 from .constants import USER_AGENT
-from .utils import encode_uri_component
-from ucollections import OrderedDict
+from .utils import encode_uri_component, merge
 
 
 def base_url(project_id: str, use_cdn: bool = False, api_host: str = None):
@@ -127,6 +126,50 @@ def mutate_request(
         ),
         base_headers(token),
         {"mutations": mutations},
+    )
+
+
+def listen_endpoint(api_version: str, dataset: str):
+    return versioned_path(api_version) + f"/data/listen/{dataset}"
+
+
+def listen_request(
+    filter: str,
+    project_id: str,
+    dataset: str,
+    api_version: str,
+    variables: dict = None,
+    token: str = None,
+    api_host=None,
+    include_result: bool = False,
+    include_previous_revision: bool = False,
+    visibility: str = None,
+    effect_format: str = None,
+    tag: str = None,
+):
+    qs = merge(
+        variables_to_query_params(variables or {}),
+        {"query": f"*[{filter}]", "enableResume": "true"}
+    )
+
+    if include_result:
+        qs["includeResult"] = "true"
+    if include_previous_revision:
+        qs["includePreviousRevision"] = "true"
+    if visibility:
+        qs["visibility"] = visibility
+    if effect_format:
+        qs["effectFormat"] = effect_format
+    if tag:
+        qs["tag"] = tag
+
+    return (
+        build_url(
+            base_url(project_id, False, api_host),
+            listen_endpoint(api_version, dataset),
+            qs,
+        ),
+        base_headers(token),
     )
 
 

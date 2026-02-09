@@ -1,8 +1,9 @@
 from test_helpers import TestError
 import test_query
 import test_mutation
+import test_listen
 
-test_modules = [test_query, test_mutation]
+test_modules = [test_query, test_mutation, test_listen]
 
 for test_module in test_modules:
     for name, test in test_module.__dict__.items():
