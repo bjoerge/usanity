@@ -85,10 +85,9 @@ def query_request(
                 f'Query parameters dictionary can not include keys starting with "$" (found "{key}")'
             )
 
-    qs = (
-        OrderedDict({"query": query})
-        | variables_to_query_params(variables or {})
-        | (params or {})
+    qs = merge(
+        merge(params or {}, variables_to_query_params(variables or {})),
+        {"query": query},
     )
 
     return (

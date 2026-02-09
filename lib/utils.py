@@ -1,3 +1,9 @@
+def merge(x: dict, y: dict):
+    z = x.copy()
+    z.update(y)
+    return z
+
+
 def encode_uri_component(uri_component: str):
     return "".join(
         [

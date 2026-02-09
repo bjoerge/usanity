@@ -38,10 +38,12 @@ url, headers = query_request(
 )
 # Use urequests to perform the actual http request for us
 res = urequests.get(url, headers=headers)
-sensors = res.json['result']
 
-print(sensors)
-
+if res.status_code < 200 or res.status_code > 299:
+    print(f"{res.status_code}: {res.reason}")
+    print(res.content)
+else:
+    print(res.json()['result'])
 ```
 
 ### Mutate a document
