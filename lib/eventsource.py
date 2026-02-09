@@ -82,7 +82,7 @@ class EventSource:
         self._url = url
         self._headers = headers or {}
         self._sock = None
-        self._buf = b""
+        self._buf = bytearray()
         self._last_event_id = last_event_id
         self._retry_ms = 3000
         self._connect()
@@ -97,66 +97,117 @@ class EventSource:
         if use_ssl:
             self._sock = ssl.wrap_socket(self._sock, server_hostname=host)
 
-        # Build HTTP request
-        request = f"GET {path} HTTP/1.1\r\n"
-        request += f"Host: {host}\r\n"
-        request += "Accept: text/event-stream\r\n"
+        # Write HTTP request directly to socket to avoid building full string
+        w = self._sock.write
+        w(b"GET ")
+        w(path.encode())
+        w(b" HTTP/1.1\r\nHost: ")
+        w(host.encode())
+        w(b"\r\nAccept: text/event-stream\r\n")
         if self._last_event_id is not None:
-            request += f"Last-Event-ID: {self._last_event_id}\r\n"
+            w(b"Last-Event-ID: ")
+            w(str(self._last_event_id).encode())
+            w(b"\r\n")
         for key, value in self._headers.items():
-            request += f"{key}: {value}\r\n"
-        request += "\r\n"
-
-        self._sock.write(request.encode())
+            w(key.encode())
+            w(b": ")
+            w(value.encode())
+            w(b"\r\n")
+        w(b"\r\n")
 
         # Skip HTTP status line and response headers
         self._read_until(b"\r\n\r\n")
 
     def _read_until(self, delimiter):
-        while delimiter not in self._buf:
+        buf = self._buf
+        while True:
+            idx = buf.find(delimiter)
+            if idx >= 0:
+                result = bytes(buf[: idx + len(delimiter)])
+                del buf[: idx + len(delimiter)]
+                return result
             chunk = self._sock.read(512)
             if not chunk:
                 raise OSError("Connection closed")
-            self._buf += chunk
-        idx = self._buf.index(delimiter) + len(delimiter)
-        result = self._buf[:idx]
-        self._buf = self._buf[idx:]
-        return result
+            buf.extend(chunk)
 
     def _readline(self):
-        while b"\n" not in self._buf:
+        """Read one line from the socket. Returns bytes (without line ending)."""
+        buf = self._buf
+        while True:
+            idx = buf.find(b"\n")
+            if idx >= 0:
+                end = idx
+                if end > 0 and buf[end - 1] == 0x0D:
+                    end -= 1
+                line = bytes(buf[:end])
+                del buf[: idx + 1]
+                return line
             chunk = self._sock.read(512)
             if not chunk:
                 raise OSError("Connection closed")
-            self._buf += chunk
-        idx = self._buf.index(b"\n") + 1
-        line = self._buf[:idx]
-        self._buf = self._buf[idx:]
-        return line.rstrip(b"\r\n").decode()
+            buf.extend(chunk)
 
     def __iter__(self):
         return self
 
     def __next__(self):
-        lines = []
+        # Parse SSE fields inline with bytes to avoid intermediate string allocations
+        event_type = None
+        data_parts = []
+        event_id = None
+        retry = None
+        has_fields = False
+
         while True:
             try:
                 line = self._readline()
             except OSError:
                 self._reconnect()
-                lines = []
+                event_type = None
+                data_parts = []
+                event_id = None
+                retry = None
+                has_fields = False
                 continue
-            if line == "":
-                event, retry = parse_sse_lines(lines)
+
+            if not line:
+                if not has_fields:
+                    continue
                 if retry is not None:
                     self._retry_ms = retry
-                if event is not None:
-                    if event.id is not None:
-                        self._last_event_id = event.id
+                if data_parts:
+                    eid = event_id.decode() if event_id is not None else None
+                    event = Event(
+                        event=event_type.decode() if event_type is not None else "message",
+                        data=b"\n".join(data_parts).decode(),
+                        id=eid,
+                    )
+                    if eid is not None:
+                        self._last_event_id = eid
                     return event
-                lines = []
-            else:
-                lines.append(line)
+                # Had fields but no data — reset
+                event_type = None
+                data_parts = []
+                event_id = None
+                retry = None
+                has_fields = False
+            elif line.startswith(b"data:"):
+                data_parts.append(line[5:].lstrip(b" "))
+                has_fields = True
+            elif line.startswith(b"event:"):
+                event_type = line[6:].lstrip(b" ")
+                has_fields = True
+            elif line.startswith(b"id:"):
+                event_id = line[3:].lstrip(b" ")
+                has_fields = True
+            elif line.startswith(b"retry:"):
+                val = line[6:].strip()
+                if val.isdigit():
+                    retry = int(val)
+                has_fields = True
+            elif line.startswith(b":"):
+                pass  # comment
 
     def _reconnect(self):
         if self._sock:
@@ -165,7 +216,7 @@ class EventSource:
             except Exception:
                 pass
             self._sock = None
-        self._buf = b""
+        self._buf = bytearray()
         sleep(self._retry_ms / 1000)
         self._connect()
 

@@ -154,7 +154,7 @@ def test_last_event_id_tracked():
     es._url = "http://localhost/events"
     es._headers = {}
     es._sock = sock
-    es._buf = b""
+    es._buf = bytearray()
     es._last_event_id = None
     es._retry_ms = 3000
 
@@ -175,7 +175,7 @@ def test_last_event_id_not_updated_without_id():
     es._url = "http://localhost/events"
     es._headers = {}
     es._sock = sock
-    es._buf = b""
+    es._buf = bytearray()
     es._last_event_id = "previous"
     es._retry_ms = 3000
 
@@ -195,7 +195,7 @@ def test_retry_field_updates_retry_ms():
     es._url = "http://localhost/events"
     es._headers = {}
     es._sock = sock
-    es._buf = b""
+    es._buf = bytearray()
     es._last_event_id = None
     es._retry_ms = 3000
 
@@ -243,12 +243,12 @@ def test_last_event_id_header_sent_on_connect():
         es._url = "http://localhost/events"
         es._headers = {"Authorization": "Bearer tok"}
         es._sock = None
-        es._buf = b""
+        es._buf = bytearray()
         es._last_event_id = "evt-42"
         es._retry_ms = 3000
         es._connect()
 
-        request_str = written[0].decode()
+        request_str = b"".join(written).decode()
         expect_equal("Last-Event-ID: evt-42\r\n" in request_str, True)
         expect_equal("Authorization: Bearer tok\r\n" in request_str, True)
     finally:
@@ -288,12 +288,12 @@ def test_no_last_event_id_header_when_none():
         es._url = "http://localhost/events"
         es._headers = {}
         es._sock = None
-        es._buf = b""
+        es._buf = bytearray()
         es._last_event_id = None
         es._retry_ms = 3000
         es._connect()
 
-        request_str = written[0].decode()
+        request_str = b"".join(written).decode()
         expect_equal("Last-Event-ID" in request_str, False)
     finally:
         es_mod.socket = original_socket
@@ -342,7 +342,7 @@ def test_reconnect_on_connection_drop():
         es._url = "http://localhost/events"
         es._headers = {}
         es._sock = sock1
-        es._buf = b""
+        es._buf = bytearray()
         es._last_event_id = None
         es._retry_ms = 3000
 
@@ -413,7 +413,7 @@ def test_reconnect_sends_last_event_id():
         es._url = "http://localhost/events"
         es._headers = {}
         es._sock = sock1
-        es._buf = b""
+        es._buf = bytearray()
         es._last_event_id = "evt-99"
         es._retry_ms = 1000
 
@@ -421,7 +421,7 @@ def test_reconnect_sends_last_event_id():
         expect_equal(event, Event(event="message", data="after-reconnect"))
 
         # Verify Last-Event-ID was sent
-        request_str = written_requests[0].decode()
+        request_str = b"".join(written_requests).decode()
         expect_equal("Last-Event-ID: evt-99\r\n" in request_str, True)
 
         # Verify sleep used correct retry
@@ -460,7 +460,7 @@ def test_constructor_last_event_id():
 
     try:
         es = EventSource("http://localhost/events", last_event_id="resume-123")
-        request_str = written[0].decode()
+        request_str = b"".join(written).decode()
         expect_equal("Last-Event-ID: resume-123\r\n" in request_str, True)
         expect_equal(es._last_event_id, "resume-123")
         expect_equal(es._retry_ms, 3000)
