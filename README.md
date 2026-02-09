@@ -98,3 +98,37 @@ res = urequests.post(url, json=body, headers=headers)
 print(res.json)
 
 ```
+
+### Listen for real-time updates
+
+```python
+import json
+from usanity import listen_request
+from usanity.eventsource import EventSource
+
+url, headers = listen_request(
+    "_type == 'sensor' && sensorType == $type",
+    variables={"sensorType": "temperature"},
+    project_id="<your project id>",
+    dataset="<your dataset>",
+    api_version="2023-03-10",
+    token="<token>",
+    include_result=True,
+)
+
+for event in EventSource(url, headers):
+    if event.event == "mutation":
+        data = json.loads(event.data)
+        print("Document changed:", data["documentId"])
+        print("Result:", data.get("result"))
+```
+
+The `EventSource` automatically reconnects on connection drops, sending the `Last-Event-ID` header so the server can resume the stream. To resume from a known position:
+
+```python
+es = EventSource(url, headers, last_event_id="<last known event id>")
+```
+
+## License
+
+MIT
