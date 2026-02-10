@@ -15,6 +15,8 @@ except ImportError:
 
 
 class Event:
+    is_comment = False
+
     def __init__(self, event="message", data="", id=None):
         self.event = event
         self.data = data
@@ -30,6 +32,19 @@ class Event:
 
     def __repr__(self):
         return "Event(event=%r, data=%r, id=%r)" % (self.event, self.data, self.id)
+
+
+class Comment:
+    is_comment = True
+
+    def __init__(self, text=""):
+        self.text = text
+
+    def __eq__(self, other):
+        return isinstance(other, Comment) and self.text == other.text
+
+    def __repr__(self):
+        return "Comment(text=%r)" % self.text
 
 
 def parse_url(url):
@@ -78,13 +93,14 @@ def parse_sse_lines(lines):
 
 
 class EventSource:
-    def __init__(self, url, headers=None, last_event_id=None):
+    def __init__(self, url, headers=None, last_event_id=None, include_comments=False):
         self._url = url
         self._headers = headers or {}
         self._sock = None
         self._buf = bytearray()
         self._last_event_id = last_event_id
         self._retry_ms = 3000
+        self._include_comments = include_comments
         self._connect()
 
     def _connect(self):
@@ -206,7 +222,8 @@ class EventSource:
                     retry = int(val)
                 has_fields = True
             elif line.startswith(b":"):
-                pass  # comment
+                if self._include_comments and not has_fields:
+                    return Comment(line[1:].lstrip(b" ").decode())
 
     def _reconnect(self):
         if self._sock:

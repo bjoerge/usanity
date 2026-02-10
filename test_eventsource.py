@@ -1,4 +1,4 @@
-from lib.eventsource import Event, EventSource, parse_sse_lines, parse_url
+from lib.eventsource import Comment, Event, EventSource, parse_sse_lines, parse_url
 from test_helpers import expect_equal
 
 
@@ -442,6 +442,94 @@ def test_multiple_events_chunked_delivery():
 
     e3 = next(es)
     expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
+
+
+def test_comment_ignored_by_default():
+    """Comment lines are ignored when include_comments is False."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\n: heartbeat\r\ndata: hello\r\n\r\n"
+    sock = FakeSocket([stream])
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = False
+
+    es._read_until(b"\r\n\r\n")
+
+    event = next(es)
+    expect_equal(event, Event(event="message", data="hello"))
+
+
+def test_comment_yielded_when_enabled():
+    """Comment lines yield Comment instances when include_comments is True."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\n: keepalive\r\ndata: hello\r\n\r\n"
+    sock = FakeSocket([stream])
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = True
+
+    es._read_until(b"\r\n\r\n")
+
+    msg = next(es)
+    expect_equal(msg, Comment("keepalive"))
+    expect_equal(msg.is_comment, True)
+
+    event = next(es)
+    expect_equal(event, Event(event="message", data="hello"))
+    expect_equal(event.is_comment, False)
+
+
+def test_comment_empty():
+    """Empty comment line (just ':') yields Comment with empty text."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\n:\r\ndata: hello\r\n\r\n"
+    sock = FakeSocket([stream])
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = True
+
+    es._read_until(b"\r\n\r\n")
+
+    msg = next(es)
+    expect_equal(msg, Comment(""))
+
+    event = next(es)
+    expect_equal(event, Event(event="message", data="hello"))
+
+
+def test_comment_mid_event_ignored():
+    """Comment lines mid-event are ignored even when include_comments is True."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\nevent: mutation\r\n: mid-comment\r\ndata: payload\r\n\r\n"
+    sock = FakeSocket([stream])
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = True
+
+    es._read_until(b"\r\n\r\n")
+
+    event = next(es)
+    expect_equal(event, Event(event="mutation", data="payload"))
 
 
 def test_constructor_last_event_id():
