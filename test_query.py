@@ -15,7 +15,7 @@ def test_query():
 
     expect_equal(
         url,
-        "https://abc.api.sanity.io/v2023-03-10/data/query/iot?query=%2a%5b%5ftype%20%3d%3d%20%22sensor%22%20%26%26%20%5fid%20%3d%3d%20%24id%20%26%26%20value%20%3c%20%24threshold%5d%5b0...%24limit%20%26%26%20isActive%3d%24active%5d&$id=%22temperature-xyz%22&$limit=100&$threshold=0.052&$isActive=true&tag=test-request",
+        "https://abc.api.sanity.io/v2023-03-10/data/query/iot?tag=test-request&$id=%22temperature-xyz%22&$limit=100&$isActive=true&$threshold=0.052&query=%2a%5b%5ftype%20%3d%3d%20%22sensor%22%20%26%26%20%5fid%20%3d%3d%20%24id%20%26%26%20value%20%3c%20%24threshold%5d%5b0...%24limit%20%26%26%20isActive%3d%24active%5d",
     )
 
 
@@ -31,7 +31,7 @@ def test_query_use_cdn():
 
     expect_equal(
         url,
-        "https://abc.apicdn.sanity.io/v2023-03-10/data/query/iot?query=%2a%5b%5ftype%20%3d%3d%20%27sensor%27%20%26%26%20%5fid%20%3d%3d%20%24id%5d&$id=%22temperature-xyz%22",
+        "https://abc.apicdn.sanity.io/v2023-03-10/data/query/iot?$id=%22temperature-xyz%22&query=%2a%5b%5ftype%20%3d%3d%20%27sensor%27%20%26%26%20%5fid%20%3d%3d%20%24id%5d",
     )
 
 
