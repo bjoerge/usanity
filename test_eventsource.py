@@ -128,11 +128,26 @@ class FakeSocket:
         self._chunks = list(chunks)
         self._closed = False
         self.written = []
+        self._rbuf = b""
 
     def read(self, n):
         if not self._chunks:
             raise OSError("Connection closed")
         return self._chunks.pop(0)
+
+    def readline(self):
+        while b"\n" not in self._rbuf:
+            if not self._chunks:
+                if self._rbuf:
+                    data = self._rbuf
+                    self._rbuf = b""
+                    return data
+                raise OSError("Connection closed")
+            self._rbuf += self._chunks.pop(0)
+        idx = self._rbuf.index(b"\n")
+        line = self._rbuf[:idx + 1]
+        self._rbuf = self._rbuf[idx + 1:]
+        return line
 
     def write(self, data):
         self.written.append(data)
@@ -215,6 +230,8 @@ def test_last_event_id_header_sent_on_connect():
     original_parse_url = es_mod.parse_url
 
     class MockSocket:
+        def __init__(self):
+            self._rbuf = b""
         def connect(self, addr):
             pass
         def write(self, data):
@@ -222,6 +239,15 @@ def test_last_event_id_header_sent_on_connect():
         def read(self, n):
             # Return fake HTTP response headers
             return b"HTTP/1.1 200 OK\r\n\r\n"
+        def readline(self):
+            if not self._rbuf:
+                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
+            idx = self._rbuf.find(b"\n")
+            if idx < 0:
+                return b""
+            line = self._rbuf[:idx + 1]
+            self._rbuf = self._rbuf[idx + 1:]
+            return line
         def close(self):
             pass
 
@@ -262,12 +288,23 @@ def test_no_last_event_id_header_when_none():
     written = []
 
     class MockSocket:
+        def __init__(self):
+            self._rbuf = b""
         def connect(self, addr):
             pass
         def write(self, data):
             written.append(data)
         def read(self, n):
             return b"HTTP/1.1 200 OK\r\n\r\n"
+        def readline(self):
+            if not self._rbuf:
+                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
+            idx = self._rbuf.find(b"\n")
+            if idx < 0:
+                return b""
+            line = self._rbuf[:idx + 1]
+            self._rbuf = self._rbuf[idx + 1:]
+            return line
         def close(self):
             pass
 
@@ -381,16 +418,30 @@ def test_reconnect_sends_last_event_id():
     stream2 = b"data: after-reconnect\r\n\r\n"
 
     class MockSocket2:
+        def __init__(self):
+            self._chunks = [stream2_headers, stream2]
+            self._rbuf = b""
         def connect(self, addr):
             pass
         def write(self, data):
             written_requests.append(data)
         def read(self, n):
-            if not hasattr(self, '_chunks'):
-                self._chunks = [stream2_headers, stream2]
             if not self._chunks:
                 raise OSError("Connection closed")
             return self._chunks.pop(0)
+        def readline(self):
+            while b"\n" not in self._rbuf:
+                if not self._chunks:
+                    if self._rbuf:
+                        data = self._rbuf
+                        self._rbuf = b""
+                        return data
+                    raise OSError("Connection closed")
+                self._rbuf += self._chunks.pop(0)
+            idx = self._rbuf.index(b"\n")
+            line = self._rbuf[:idx + 1]
+            self._rbuf = self._rbuf[idx + 1:]
+            return line
         def close(self):
             pass
 
@@ -431,6 +482,66 @@ def test_reconnect_sends_last_event_id():
         es_mod.socket = original_socket
 
 
+def test_multiple_events_in_order():
+    """Multiple events in a stream are yielded in correct order."""
+    stream = (
+        b"HTTP/1.1 200 OK\r\n\r\n"
+        b"event: welcome\r\ndata: {}\r\n\r\n"
+        b'event: mutation\r\nid: tx1\r\ndata: {"doc":"A"}\r\n\r\n'
+        b'event: mutation\r\nid: tx2\r\ndata: {"doc":"B"}\r\n\r\n'
+    )
+    sock = FakeSocket([stream])
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+
+    es._read_until(b"\r\n\r\n")
+
+    e1 = next(es)
+    expect_equal(e1, Event(event="welcome", data="{}"))
+
+    e2 = next(es)
+    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
+
+    e3 = next(es)
+    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
+
+
+def test_multiple_events_chunked_delivery():
+    """Events delivered across multiple read() chunks are still in order."""
+    # Simulate event terminator arriving with next event's data
+    chunks = [
+        b"HTTP/1.1 200 OK\r\n\r\nevent: welcome\r\ndata: {}\r\n",
+        b"\r\nevent: mutation\r\nid: tx1\r\ndata: {\"doc\":\"A\"}\r\n",
+        b"\r\nevent: mutation\r\nid: tx2\r\ndata: {\"doc\":\"B\"}\r\n\r\n",
+    ]
+    sock = FakeSocket(chunks)
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+
+    es._read_until(b"\r\n\r\n")
+
+    e1 = next(es)
+    expect_equal(e1, Event(event="welcome", data="{}"))
+
+    e2 = next(es)
+    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
+
+    e3 = next(es)
+    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
+
+
 def test_constructor_last_event_id():
     """Constructor accepts last_event_id param and sends it on initial connect."""
     import lib.eventsource as es_mod
@@ -439,12 +550,23 @@ def test_constructor_last_event_id():
     original_socket = es_mod.socket
 
     class MockSocket:
+        def __init__(self):
+            self._rbuf = b""
         def connect(self, addr):
             pass
         def write(self, data):
             written.append(data)
         def read(self, n):
             return b"HTTP/1.1 200 OK\r\n\r\n"
+        def readline(self):
+            if not self._rbuf:
+                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
+            idx = self._rbuf.find(b"\n")
+            if idx < 0:
+                return b""
+            line = self._rbuf[:idx + 1]
+            self._rbuf = self._rbuf[idx + 1:]
+            return line
         def close(self):
             pass
 

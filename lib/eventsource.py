@@ -126,7 +126,7 @@ class EventSource:
                 result = bytes(self._buf[:end])
                 self._buf = self._buf[end:]
                 return result
-            chunk = self._sock.read(512)
+            chunk = self._sock.readline()
             if not chunk:
                 raise OSError("Connection closed")
             self._buf.extend(chunk)
@@ -142,7 +142,7 @@ class EventSource:
                 line = bytes(self._buf[:end])
                 self._buf = self._buf[idx + 1 :]
                 return line
-            chunk = self._sock.read(512)
+            chunk = self._sock.readline()
             if not chunk:
                 raise OSError("Connection closed")
             self._buf.extend(chunk)

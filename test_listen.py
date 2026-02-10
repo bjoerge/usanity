@@ -4,7 +4,7 @@ from test_helpers import expect_equal
 
 def test_listen():
     url, headers = request.listen_request(
-        '*[_type == "sensor" && _id == $id]',
+        '_type == "sensor" && _id == $id',
         variables={"id": "temperature-xyz"},
         project_id="abc",
         dataset="iot",
@@ -21,7 +21,7 @@ def test_listen():
 
 def test_listen_with_options():
     url, headers = request.listen_request(
-        '*[_type == "post"]',
+        '_type == "post"',
         project_id="abc",
         dataset="production",
         api_version="2023-03-10",
