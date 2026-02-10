@@ -159,6 +159,16 @@ class FakeSocket:
         pass
 
 
+def fake_socket_module(make_socket):
+    """Create a fake socket module that returns sockets from the given factory."""
+    class Module:
+        @staticmethod
+        def getaddrinfo(host, port):
+            return [("", "", "", "", ("127.0.0.1", port))]
+        socket = staticmethod(make_socket)
+    return Module
+
+
 def test_last_event_id_tracked():
     """After receiving an event with id, _last_event_id is updated."""
     # Build a stream: HTTP headers + SSE event with id
@@ -225,44 +235,9 @@ def test_last_event_id_header_sent_on_connect():
     """_connect sends Last-Event-ID header when _last_event_id is set."""
     import lib.eventsource as es_mod
 
-    # Capture what _connect sends
-    written = []
-    original_parse_url = es_mod.parse_url
-
-    class MockSocket:
-        def __init__(self):
-            self._rbuf = b""
-        def connect(self, addr):
-            pass
-        def write(self, data):
-            written.append(data)
-        def read(self, n):
-            # Return fake HTTP response headers
-            return b"HTTP/1.1 200 OK\r\n\r\n"
-        def readline(self):
-            if not self._rbuf:
-                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
-            idx = self._rbuf.find(b"\n")
-            if idx < 0:
-                return b""
-            line = self._rbuf[:idx + 1]
-            self._rbuf = self._rbuf[idx + 1:]
-            return line
-        def close(self):
-            pass
-
+    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
     original_socket = es_mod.socket
-    original_ssl = es_mod.ssl
-
-    class FakeSocketModule:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        @staticmethod
-        def socket():
-            return MockSocket()
-
-    es_mod.socket = FakeSocketModule
+    es_mod.socket = fake_socket_module(lambda: sock)
 
     try:
         es = EventSource.__new__(EventSource)
@@ -274,7 +249,7 @@ def test_last_event_id_header_sent_on_connect():
         es._retry_ms = 3000
         es._connect()
 
-        request_str = b"".join(written).decode()
+        request_str = b"".join(sock.written).decode()
         expect_equal("Last-Event-ID: evt-42\r\n" in request_str, True)
         expect_equal("Authorization: Bearer tok\r\n" in request_str, True)
     finally:
@@ -285,40 +260,9 @@ def test_no_last_event_id_header_when_none():
     """_connect does not send Last-Event-ID header when _last_event_id is None."""
     import lib.eventsource as es_mod
 
-    written = []
-
-    class MockSocket:
-        def __init__(self):
-            self._rbuf = b""
-        def connect(self, addr):
-            pass
-        def write(self, data):
-            written.append(data)
-        def read(self, n):
-            return b"HTTP/1.1 200 OK\r\n\r\n"
-        def readline(self):
-            if not self._rbuf:
-                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
-            idx = self._rbuf.find(b"\n")
-            if idx < 0:
-                return b""
-            line = self._rbuf[:idx + 1]
-            self._rbuf = self._rbuf[idx + 1:]
-            return line
-        def close(self):
-            pass
-
+    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
     original_socket = es_mod.socket
-
-    class FakeSocketModule:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        @staticmethod
-        def socket():
-            return MockSocket()
-
-    es_mod.socket = FakeSocketModule
+    es_mod.socket = fake_socket_module(lambda: sock)
 
     try:
         es = EventSource.__new__(EventSource)
@@ -330,7 +274,7 @@ def test_no_last_event_id_header_when_none():
         es._retry_ms = 3000
         es._connect()
 
-        request_str = b"".join(written).decode()
+        request_str = b"".join(sock.written).decode()
         expect_equal("Last-Event-ID" in request_str, False)
     finally:
         es_mod.socket = original_socket
@@ -363,16 +307,11 @@ def test_reconnect_on_connection_drop():
 
     original_socket = es_mod.socket
 
-    class FakeSocketModule:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        @staticmethod
-        def socket():
-            connect_count[0] += 1
-            return sockets.pop(0)
+    def make_socket():
+        connect_count[0] += 1
+        return sockets.pop(0)
 
-    es_mod.socket = FakeSocketModule
+    es_mod.socket = fake_socket_module(make_socket)
 
     try:
         es = EventSource.__new__(EventSource)
@@ -406,7 +345,6 @@ def test_reconnect_sends_last_event_id():
     import lib.eventsource as es_mod
 
     sleep_calls = []
-    written_requests = []
     original_sleep = es_mod.sleep
 
     def fake_sleep(secs):
@@ -417,45 +355,9 @@ def test_reconnect_sends_last_event_id():
     stream2_headers = b"HTTP/1.1 200 OK\r\n\r\n"
     stream2 = b"data: after-reconnect\r\n\r\n"
 
-    class MockSocket2:
-        def __init__(self):
-            self._chunks = [stream2_headers, stream2]
-            self._rbuf = b""
-        def connect(self, addr):
-            pass
-        def write(self, data):
-            written_requests.append(data)
-        def read(self, n):
-            if not self._chunks:
-                raise OSError("Connection closed")
-            return self._chunks.pop(0)
-        def readline(self):
-            while b"\n" not in self._rbuf:
-                if not self._chunks:
-                    if self._rbuf:
-                        data = self._rbuf
-                        self._rbuf = b""
-                        return data
-                    raise OSError("Connection closed")
-                self._rbuf += self._chunks.pop(0)
-            idx = self._rbuf.index(b"\n")
-            line = self._rbuf[:idx + 1]
-            self._rbuf = self._rbuf[idx + 1:]
-            return line
-        def close(self):
-            pass
-
+    reconnect_sock = FakeSocket([stream2_headers, stream2])
     original_socket = es_mod.socket
-
-    class FakeSocketModule:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        @staticmethod
-        def socket():
-            return MockSocket2()
-
-    es_mod.socket = FakeSocketModule
+    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
 
     try:
         # Create an EventSource that already has a last_event_id and an empty socket
@@ -472,7 +374,7 @@ def test_reconnect_sends_last_event_id():
         expect_equal(event, Event(event="message", data="after-reconnect"))
 
         # Verify Last-Event-ID was sent
-        request_str = b"".join(written_requests).decode()
+        request_str = b"".join(reconnect_sock.written).decode()
         expect_equal("Last-Event-ID: evt-99\r\n" in request_str, True)
 
         # Verify sleep used correct retry
@@ -546,43 +448,13 @@ def test_constructor_last_event_id():
     """Constructor accepts last_event_id param and sends it on initial connect."""
     import lib.eventsource as es_mod
 
-    written = []
+    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
     original_socket = es_mod.socket
-
-    class MockSocket:
-        def __init__(self):
-            self._rbuf = b""
-        def connect(self, addr):
-            pass
-        def write(self, data):
-            written.append(data)
-        def read(self, n):
-            return b"HTTP/1.1 200 OK\r\n\r\n"
-        def readline(self):
-            if not self._rbuf:
-                self._rbuf = b"HTTP/1.1 200 OK\r\n\r\n"
-            idx = self._rbuf.find(b"\n")
-            if idx < 0:
-                return b""
-            line = self._rbuf[:idx + 1]
-            self._rbuf = self._rbuf[idx + 1:]
-            return line
-        def close(self):
-            pass
-
-    class FakeSocketModule:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        @staticmethod
-        def socket():
-            return MockSocket()
-
-    es_mod.socket = FakeSocketModule
+    es_mod.socket = fake_socket_module(lambda: sock)
 
     try:
         es = EventSource("http://localhost/events", last_event_id="resume-123")
-        request_str = b"".join(written).decode()
+        request_str = b"".join(sock.written).decode()
         expect_equal("Last-Event-ID: resume-123\r\n" in request_str, True)
         expect_equal(es._last_event_id, "resume-123")
         expect_equal(es._retry_ms, 3000)
