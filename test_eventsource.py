@@ -384,6 +384,46 @@ def test_reconnect_sends_last_event_id():
         es_mod.socket = original_socket
 
 
+def test_reconnect_retries_on_network_error():
+    """Reconnect retries when _connect raises OSError (e.g. EHOSTUNREACH)."""
+    import lib.eventsource as es_mod
+
+    sleep_calls = []
+    original_sleep = es_mod.sleep
+    es_mod.sleep = lambda secs: sleep_calls.append(secs)
+
+    connect_attempts = [0]
+    good_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: back online\r\n\r\n"])
+
+    def make_socket():
+        connect_attempts[0] += 1
+        if connect_attempts[0] <= 2:
+            raise OSError("EHOSTUNREACH")
+        return good_sock
+
+    original_socket = es_mod.socket
+    es_mod.socket = fake_socket_module(make_socket)
+
+    try:
+        sock1 = FakeSocket([])  # immediately raises OSError
+        es = EventSource.__new__(EventSource)
+        es._url = "http://localhost/events"
+        es._headers = {}
+        es._sock = sock1
+        es._buf = bytearray()
+        es._last_event_id = None
+        es._retry_ms = 1000
+        es._include_comments = False
+
+        event = next(es)
+        expect_equal(event, Event(event="message", data="back online"))
+        expect_equal(connect_attempts[0], 3)  # 2 failures + 1 success
+        expect_equal(sleep_calls, [1.0, 1.0, 1.0])
+    finally:
+        es_mod.sleep = original_sleep
+        es_mod.socket = original_socket
+
+
 def test_multiple_events_in_order():
     """Multiple events in a stream are yielded in correct order."""
     stream = (

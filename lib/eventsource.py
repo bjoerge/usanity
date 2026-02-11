@@ -233,8 +233,13 @@ class EventSource:
                 pass
             self._sock = None
         self._buf = bytearray()
-        sleep(self._retry_ms / 1000)
-        self._connect()
+        while True:
+            sleep(self._retry_ms / 1000)
+            try:
+                self._connect()
+                return
+            except OSError:
+                pass
 
     def close(self):
         if self._sock:
