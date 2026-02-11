@@ -100,8 +100,9 @@ class EventSource:
     _include_comments = False
     _include_reconnects = False
     _pending_reconnect = False
+    _debug = None
 
-    def __init__(self, url, headers=None, last_event_id=None, include_comments=False, include_reconnects=False):
+    def __init__(self, url, headers=None, last_event_id=None, include_comments=False, include_reconnects=False, debug=None):
         self._url = url
         self._headers = headers or {}
         self._sock = None
@@ -111,6 +112,7 @@ class EventSource:
         self._include_comments = include_comments
         self._include_reconnects = include_reconnects
         self._pending_reconnect = False
+        self._debug = debug
         self._connect()
 
     def _connect(self):
@@ -191,6 +193,8 @@ class EventSource:
 
             try:
                 line = self._readline()
+                if self._debug:
+                    self._debug(line)
             except OSError:
                 self._reconnect()
                 if self._include_reconnects:

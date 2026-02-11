@@ -636,6 +636,27 @@ def test_comment_mid_event_ignored():
     expect_equal(event, Event(event="mutation", data="payload"))
 
 
+def test_debug_callback():
+    """Debug callback receives each raw line as bytes."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\nevent: mutation\r\nid: tx1\r\ndata: payload\r\n\r\n"
+    sock = FakeSocket([stream])
+
+    debug_lines = []
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._sock = sock
+    es._buf = bytearray()
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._debug = lambda line: debug_lines.append(line)
+
+    es._read_until(b"\r\n\r\n")
+
+    next(es)
+    expect_equal(debug_lines, [b"event: mutation", b"id: tx1", b"data: payload", b""])
+
+
 def test_constructor_last_event_id():
     """Constructor accepts last_event_id param and sends it on initial connect."""
     import lib.eventsource as es_mod
