@@ -332,6 +332,10 @@ def test_reconnect_on_connection_drop():
         expect_equal(event2, Event(event="message", data="second", id="2"))
         expect_equal(es._last_event_id, "2")
 
+        # Verify Last-Event-ID was sent on reconnect
+        request_str = b"".join(sock2.written).decode()
+        expect_equal("Last-Event-ID: 1\r\n" in request_str, True)
+
         # Verify sleep was called with default retry
         expect_equal(sleep_calls, [3.0])
         expect_equal(connect_count[0], 1)  # one reconnection via _connect
