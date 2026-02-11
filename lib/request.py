@@ -77,9 +77,9 @@ def query_request(
     params: dict = None,
 ):
     for key in (params or {}).keys():
-        if key is "query":
+        if key == "query":
             raise Exception('Query parameters dictionary includes reserved key "query"')
-        if key[0] is "$":
+        if key[0] == "$":
             raise Exception(
                 f'Query parameters dictionary can not include keys starting with "$" (found "{key}")'
             )
