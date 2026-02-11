@@ -16,6 +16,7 @@ except ImportError:
 
 class Event:
     is_comment = False
+    is_reconnect = False
 
     def __init__(self, event="message", data="", id=None):
         self.event = event
@@ -36,6 +37,7 @@ class Event:
 
 class Comment:
     is_comment = True
+    is_reconnect = False
 
     def __init__(self, text=""):
         self.text = text
@@ -45,6 +47,17 @@ class Comment:
 
     def __repr__(self):
         return "Comment(text=%r)" % self.text
+
+
+class Reconnect:
+    is_comment = False
+    is_reconnect = True
+
+    def __eq__(self, other):
+        return isinstance(other, Reconnect)
+
+    def __repr__(self):
+        return "Reconnect()"
 
 
 def parse_url(url):
@@ -93,7 +106,11 @@ def parse_sse_lines(lines):
 
 
 class EventSource:
-    def __init__(self, url, headers=None, last_event_id=None, include_comments=False):
+    _include_comments = False
+    _include_reconnects = False
+    _pending_reconnect = False
+
+    def __init__(self, url, headers=None, last_event_id=None, include_comments=False, include_reconnects=False):
         self._url = url
         self._headers = headers or {}
         self._sock = None
@@ -101,6 +118,8 @@ class EventSource:
         self._last_event_id = last_event_id
         self._retry_ms = 3000
         self._include_comments = include_comments
+        self._include_reconnects = include_reconnects
+        self._pending_reconnect = False
         self._connect()
 
     def _connect(self):
@@ -175,10 +194,16 @@ class EventSource:
         has_fields = False
 
         while True:
+            if self._pending_reconnect:
+                self._pending_reconnect = False
+                return Reconnect()
+
             try:
                 line = self._readline()
             except OSError:
                 self._reconnect()
+                if self._include_reconnects:
+                    self._pending_reconnect = True
                 event_type = None
                 data_parts = []
                 event_id = None

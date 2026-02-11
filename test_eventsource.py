@@ -1,4 +1,4 @@
-from lib.eventsource import Comment, Event, EventSource, parse_sse_lines, parse_url
+from lib.eventsource import Comment, Event, EventSource, Reconnect, parse_sse_lines, parse_url
 from test_helpers import expect_equal
 
 
@@ -419,6 +419,75 @@ def test_reconnect_retries_on_network_error():
         expect_equal(event, Event(event="message", data="back online"))
         expect_equal(connect_attempts[0], 3)  # 2 failures + 1 success
         expect_equal(sleep_calls, [1.0, 1.0, 1.0])
+    finally:
+        es_mod.sleep = original_sleep
+        es_mod.socket = original_socket
+
+
+def test_reconnect_yields_reconnect_when_enabled():
+    """When include_reconnects is True, a Reconnect is yielded after reconnecting."""
+    import lib.eventsource as es_mod
+
+    original_sleep = es_mod.sleep
+    es_mod.sleep = lambda secs: None
+
+    reconnect_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: hello\r\n\r\n"])
+    original_socket = es_mod.socket
+    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
+
+    try:
+        sock1 = FakeSocket([])  # immediately raises OSError
+        es = EventSource.__new__(EventSource)
+        es._url = "http://localhost/events"
+        es._headers = {}
+        es._sock = sock1
+        es._buf = bytearray()
+        es._last_event_id = None
+        es._retry_ms = 1000
+        es._include_comments = False
+        es._include_reconnects = True
+        es._pending_reconnect = False
+
+        msg = next(es)
+        expect_equal(msg, Reconnect())
+        expect_equal(msg.is_reconnect, True)
+        expect_equal(msg.is_comment, False)
+
+        event = next(es)
+        expect_equal(event, Event(event="message", data="hello"))
+        expect_equal(event.is_reconnect, False)
+    finally:
+        es_mod.sleep = original_sleep
+        es_mod.socket = original_socket
+
+
+def test_reconnect_not_yielded_by_default():
+    """When include_reconnects is False (default), no Reconnect is yielded."""
+    import lib.eventsource as es_mod
+
+    original_sleep = es_mod.sleep
+    es_mod.sleep = lambda secs: None
+
+    reconnect_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: hello\r\n\r\n"])
+    original_socket = es_mod.socket
+    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
+
+    try:
+        sock1 = FakeSocket([])  # immediately raises OSError
+        es = EventSource.__new__(EventSource)
+        es._url = "http://localhost/events"
+        es._headers = {}
+        es._sock = sock1
+        es._buf = bytearray()
+        es._last_event_id = None
+        es._retry_ms = 1000
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+
+        # Should skip straight to the event, no Reconnect
+        event = next(es)
+        expect_equal(event, Event(event="message", data="hello"))
     finally:
         es_mod.sleep = original_sleep
         es_mod.socket = original_socket
