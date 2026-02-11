@@ -450,12 +450,9 @@ def test_reconnect_yields_reconnect_when_enabled():
 
         msg = next(es)
         expect_equal(msg, Reconnect())
-        expect_equal(msg.is_reconnect, True)
-        expect_equal(msg.is_comment, False)
 
         event = next(es)
         expect_equal(event, Event(event="message", data="hello"))
-        expect_equal(event.is_reconnect, False)
     finally:
         es_mod.sleep = original_sleep
         es_mod.socket = original_socket
@@ -591,11 +588,9 @@ def test_comment_yielded_when_enabled():
 
     msg = next(es)
     expect_equal(msg, Comment("keepalive"))
-    expect_equal(msg.is_comment, True)
 
     event = next(es)
     expect_equal(event, Event(event="message", data="hello"))
-    expect_equal(event.is_comment, False)
 
 
 def test_comment_empty():

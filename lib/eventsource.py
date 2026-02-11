@@ -15,9 +15,6 @@ except ImportError:
 
 
 class Event:
-    is_comment = False
-    is_reconnect = False
-
     def __init__(self, event="message", data="", id=None):
         self.event = event
         self.data = data
@@ -36,9 +33,6 @@ class Event:
 
 
 class Comment:
-    is_comment = True
-    is_reconnect = False
-
     def __init__(self, text=""):
         self.text = text
 
@@ -50,9 +44,6 @@ class Comment:
 
 
 class Reconnect:
-    is_comment = False
-    is_reconnect = True
-
     def __eq__(self, other):
         return isinstance(other, Reconnect)
 
