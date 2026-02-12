@@ -73,6 +73,7 @@ def query_request(
     variables: dict = None,
     token: str = None,
     use_cdn: bool = False,
+    return_query: bool = False,
     api_host=None,
     params: dict = None,
 ):
@@ -86,7 +87,7 @@ def query_request(
 
     qs = merge(
         merge(params or {}, variables_to_query_params(variables or {})),
-        {"query": query},
+        {"query": query, "returnQuery": "true" if return_query else "false"},
     )
 
     return (
