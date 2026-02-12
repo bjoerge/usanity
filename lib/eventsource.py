@@ -1,17 +1,7 @@
 try:
-    import usocket as socket
+    from uasyncio import sleep, open_connection
 except ImportError:
-    import socket
-
-try:
-    import ussl as ssl
-except ImportError:
-    import ssl
-
-try:
-    from utime import sleep
-except ImportError:
-    from time import sleep
+    from asyncio import sleep, open_connection
 
 
 class Event:
@@ -105,80 +95,72 @@ class EventSource:
     def __init__(self, url, headers=None, last_event_id=None, include_comments=False, include_reconnects=False, debug=None):
         self._url = url
         self._headers = headers or {}
-        self._sock = None
-        self._buf = bytearray()
+        self._reader = None
+        self._writer = None
         self._last_event_id = last_event_id
         self._retry_ms = 3000
         self._include_comments = include_comments
         self._include_reconnects = include_reconnects
         self._pending_reconnect = False
         self._debug = debug
-        self._connect()
 
-    def _connect(self):
+    async def _connect(self):
         host, port, path, use_ssl = parse_url(self._url)
 
-        addr = socket.getaddrinfo(host, port)[0][-1]
-        self._sock = socket.socket()
-        self._sock.connect(addr)
+        self._reader, self._writer = await open_connection(
+            host, port, ssl=use_ssl, server_hostname=host if use_ssl else None
+        )
 
-        if use_ssl:
-            self._sock = ssl.wrap_socket(self._sock, server_hostname=host)
-
-        # Write HTTP request directly to socket to avoid building full string
-        w = self._sock.write
-        w(b"GET ")
-        w(path.encode())
-        w(b" HTTP/1.1\r\nHost: ")
-        w(host.encode())
-        w(b"\r\nAccept: text/event-stream\r\n")
+        # Write HTTP request
+        w = self._writer
+        w.write(b"GET ")
+        w.write(path.encode())
+        w.write(b" HTTP/1.1\r\nHost: ")
+        w.write(host.encode())
+        w.write(b"\r\nAccept: text/event-stream\r\n")
         if self._last_event_id is not None:
-            w(b"Last-Event-ID: ")
-            w(str(self._last_event_id).encode())
-            w(b"\r\n")
+            w.write(b"Last-Event-ID: ")
+            w.write(str(self._last_event_id).encode())
+            w.write(b"\r\n")
         for key, value in self._headers.items():
-            w(key.encode())
-            w(b": ")
-            w(value.encode())
-            w(b"\r\n")
-        w(b"\r\n")
+            w.write(key.encode())
+            w.write(b": ")
+            w.write(value.encode())
+            w.write(b"\r\n")
+        w.write(b"\r\n")
+        await w.drain()
 
         # Skip HTTP status line and response headers
-        self._read_until(b"\r\n\r\n")
+        await self._skip_headers()
 
-    def _read_until(self, delimiter):
+    async def _skip_headers(self):
         while True:
-            idx = self._buf.find(delimiter)
-            if idx >= 0:
-                end = idx + len(delimiter)
-                result = bytes(self._buf[:end])
-                self._buf = self._buf[end:]
-                return result
-            chunk = self._sock.readline()
-            if not chunk:
+            line = await self._reader.readline()
+            if not line:
                 raise OSError("Connection closed")
-            self._buf.extend(chunk)
+            if line == b"\r\n" or line == b"\n":
+                return
 
-    def _readline(self):
-        """Read one line from the socket. Returns bytes (without line ending)."""
-        while True:
-            idx = self._buf.find(b"\n")
-            if idx >= 0:
-                end = idx
-                if end > 0 and self._buf[end - 1] == 0x0D:
-                    end -= 1
-                line = bytes(self._buf[:end])
-                self._buf = self._buf[idx + 1 :]
-                return line
-            chunk = self._sock.readline()
-            if not chunk:
-                raise OSError("Connection closed")
-            self._buf.extend(chunk)
+    async def _readline(self):
+        """Read one line from the stream. Returns bytes (without line ending)."""
+        line = await self._reader.readline()
+        if not line:
+            raise OSError("Connection closed")
+        # Strip \r\n or \n
+        if line.endswith(b"\r\n"):
+            return line[:-2]
+        if line.endswith(b"\n"):
+            return line[:-1]
+        return line
 
-    def __iter__(self):
+    def __aiter__(self):
         return self
 
-    def __next__(self):
+    async def __anext__(self):
+        # Lazy connect on first iteration
+        if self._reader is None:
+            await self._connect()
+
         # Parse SSE fields inline with bytes to avoid intermediate string allocations
         event_type = None
         data_parts = []
@@ -192,11 +174,11 @@ class EventSource:
                 return Reconnect()
 
             try:
-                line = self._readline()
+                line = await self._readline()
                 if self._debug:
                     self._debug(line)
             except OSError:
-                self._reconnect()
+                await self._reconnect()
                 if self._include_reconnects:
                     self._pending_reconnect = True
                 event_type = None
@@ -245,23 +227,24 @@ class EventSource:
                 if self._include_comments and not has_fields:
                     return Comment(line[1:].lstrip(b" ").decode())
 
-    def _reconnect(self):
-        if self._sock:
+    async def _reconnect(self):
+        if self._writer:
             try:
-                self._sock.close()
+                self._writer.close()
             except Exception:
                 pass
-            self._sock = None
-        self._buf = bytearray()
+            self._writer = None
+        self._reader = None
         while True:
-            sleep(self._retry_ms / 1000)
+            await sleep(self._retry_ms / 1000)
             try:
-                self._connect()
+                await self._connect()
                 return
             except OSError:
                 pass
 
     def close(self):
-        if self._sock:
-            self._sock.close()
-            self._sock = None
+        if self._writer:
+            self._writer.close()
+            self._writer = None
+        self._reader = None

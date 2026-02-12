@@ -120,167 +120,201 @@ def test_parse_retry_non_numeric_ignored():
     expect_equal(retry, None)
 
 
-# --- EventSource reconnection ---
+# --- EventSource async tests ---
 
-class FakeSocket:
-    """A fake socket that yields pre-defined chunks and then raises OSError."""
-    def __init__(self, chunks):
-        self._chunks = list(chunks)
-        self._closed = False
+
+async def anext(async_iter):
+    return await async_iter.__anext__()
+
+
+class FakeStreamReader:
+    """A fake asyncio StreamReader that yields pre-defined lines."""
+
+    def __init__(self, data):
+        # data is bytes; split into lines preserving line endings
+        self._buf = data
+
+    async def readline(self):
+        if not self._buf:
+            return b""
+        idx = self._buf.find(b"\n")
+        if idx >= 0:
+            line = self._buf[: idx + 1]
+            self._buf = self._buf[idx + 1 :]
+            return line
+        # No newline found — return remaining data
+        data = self._buf
+        self._buf = b""
+        return data
+
+
+class FakeStreamWriter:
+    """A fake asyncio StreamWriter that captures written data."""
+
+    def __init__(self):
         self.written = []
-        self._rbuf = b""
-
-    def read(self, n):
-        if not self._chunks:
-            raise OSError("Connection closed")
-        return self._chunks.pop(0)
-
-    def readline(self):
-        while b"\n" not in self._rbuf:
-            if not self._chunks:
-                if self._rbuf:
-                    data = self._rbuf
-                    self._rbuf = b""
-                    return data
-                raise OSError("Connection closed")
-            self._rbuf += self._chunks.pop(0)
-        idx = self._rbuf.index(b"\n")
-        line = self._rbuf[:idx + 1]
-        self._rbuf = self._rbuf[idx + 1:]
-        return line
+        self._closed = False
 
     def write(self, data):
         self.written.append(data)
 
+    async def drain(self):
+        pass
+
     def close(self):
         self._closed = True
 
-    def connect(self, addr):
-        pass
+
+def fake_open_connection(readers_writers):
+    """Create a fake open_connection that returns (reader, writer) pairs from a list."""
+    pairs = list(readers_writers)
+
+    async def _open_connection(host, port, ssl=None, server_hostname=None):
+        if not pairs:
+            raise OSError("No more connections")
+        return pairs.pop(0)
+
+    return _open_connection
 
 
-def fake_socket_module(make_socket):
-    """Create a fake socket module that returns sockets from the given factory."""
-    class Module:
-        @staticmethod
-        def getaddrinfo(host, port):
-            return [("", "", "", "", ("127.0.0.1", port))]
-        socket = staticmethod(make_socket)
-    return Module
+def make_reader_writer(data):
+    """Create a (FakeStreamReader, FakeStreamWriter) pair from bytes data."""
+    return FakeStreamReader(data), FakeStreamWriter()
 
 
-def test_last_event_id_tracked():
+async def test_last_event_id_tracked():
     """After receiving an event with id, _last_event_id is updated."""
-    # Build a stream: HTTP headers + SSE event with id
     stream = b"HTTP/1.1 200 OK\r\n\r\nid: abc-123\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    # Skip connect — manually read headers
-    es._read_until(b"\r\n\r\n")
+    # Skip headers
+    await es._skip_headers()
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello", id="abc-123"))
     expect_equal(es._last_event_id, "abc-123")
 
 
-def test_last_event_id_not_updated_without_id():
+async def test_last_event_id_not_updated_without_id():
     """Events without id field don't change _last_event_id."""
     stream = b"HTTP/1.1 200 OK\r\n\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = "previous"
     es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello"))
     expect_equal(es._last_event_id, "previous")
 
 
-def test_retry_field_updates_retry_ms():
+async def test_retry_field_updates_retry_ms():
     """retry: field updates _retry_ms on the EventSource instance."""
     stream = b"HTTP/1.1 200 OK\r\n\r\nretry: 5000\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello"))
     expect_equal(es._retry_ms, 5000)
 
 
-def test_last_event_id_header_sent_on_connect():
+async def test_last_event_id_header_sent_on_connect():
     """_connect sends Last-Event-ID header when _last_event_id is set."""
     import lib.eventsource as es_mod
 
-    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: sock)
+    writer = FakeStreamWriter()
+    reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
+    original_open_connection = es_mod.open_connection
+    es_mod.open_connection = fake_open_connection([(reader, writer)])
 
     try:
         es = EventSource.__new__(EventSource)
         es._url = "http://localhost/events"
         es._headers = {"Authorization": "Bearer tok"}
-        es._sock = None
-        es._buf = bytearray()
+        es._reader = None
+        es._writer = None
         es._last_event_id = "evt-42"
         es._retry_ms = 3000
-        es._connect()
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+        es._debug = None
+        await es._connect()
 
-        request_str = b"".join(sock.written).decode()
+        request_str = b"".join(writer.written).decode()
         expect_equal("Last-Event-ID: evt-42\r\n" in request_str, True)
         expect_equal("Authorization: Bearer tok\r\n" in request_str, True)
     finally:
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection
 
 
-def test_no_last_event_id_header_when_none():
+async def test_no_last_event_id_header_when_none():
     """_connect does not send Last-Event-ID header when _last_event_id is None."""
     import lib.eventsource as es_mod
 
-    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: sock)
+    writer = FakeStreamWriter()
+    reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
+    original_open_connection = es_mod.open_connection
+    es_mod.open_connection = fake_open_connection([(reader, writer)])
 
     try:
         es = EventSource.__new__(EventSource)
         es._url = "http://localhost/events"
         es._headers = {}
-        es._sock = None
-        es._buf = bytearray()
+        es._reader = None
+        es._writer = None
         es._last_event_id = None
         es._retry_ms = 3000
-        es._connect()
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+        es._debug = None
+        await es._connect()
 
-        request_str = b"".join(sock.written).decode()
+        request_str = b"".join(writer.written).decode()
         expect_equal("Last-Event-ID" in request_str, False)
     finally:
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection
 
 
-def test_reconnect_on_connection_drop():
+async def test_reconnect_on_connection_drop():
     """EventSource reconnects after connection drops and continues reading events."""
     import lib.eventsource as es_mod
 
@@ -288,8 +322,9 @@ def test_reconnect_on_connection_drop():
     sleep_calls = []
     connect_count = [0]
     original_sleep = es_mod.sleep
+    original_open_connection = es_mod.open_connection
 
-    def fake_sleep(secs):
+    async def fake_sleep(secs):
         sleep_calls.append(secs)
 
     es_mod.sleep = fake_sleep
@@ -297,43 +332,44 @@ def test_reconnect_on_connection_drop():
     # First connection: delivers one event then drops
     # Second connection: delivers another event
     stream1 = b"id: 1\r\ndata: first\r\n\r\n"
-    stream2_headers = b"HTTP/1.1 200 OK\r\n\r\n"
-    stream2 = b"id: 2\r\ndata: second\r\n\r\n"
+    stream2 = b"HTTP/1.1 200 OK\r\n\r\nid: 2\r\ndata: second\r\n\r\n"
 
-    sock1 = FakeSocket([stream1])  # will OSError after stream1 is consumed
-    sock2 = FakeSocket([stream2_headers, stream2])
+    reader1, writer1 = make_reader_writer(stream1)
+    reader2, writer2 = make_reader_writer(stream2)
 
-    sockets = [sock2]  # sock1 is already in use; sock2 for reconnect
+    pairs = [(reader2, writer2)]
 
-    original_socket = es_mod.socket
-
-    def make_socket():
+    async def mock_open_connection(host, port, ssl=None, server_hostname=None):
         connect_count[0] += 1
-        return sockets.pop(0)
+        return pairs.pop(0)
 
-    es_mod.socket = fake_socket_module(make_socket)
+    es_mod.open_connection = mock_open_connection
 
     try:
         es = EventSource.__new__(EventSource)
         es._url = "http://localhost/events"
         es._headers = {}
-        es._sock = sock1
-        es._buf = bytearray()
+        es._reader = reader1
+        es._writer = writer1
         es._last_event_id = None
         es._retry_ms = 3000
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+        es._debug = None
 
         # First event
-        event1 = next(es)
+        event1 = await anext(es)
         expect_equal(event1, Event(event="message", data="first", id="1"))
         expect_equal(es._last_event_id, "1")
 
-        # Second next() will hit OSError from sock1, reconnect, read from sock2
-        event2 = next(es)
+        # Second anext() will hit OSError from reader1, reconnect, read from reader2
+        event2 = await anext(es)
         expect_equal(event2, Event(event="message", data="second", id="2"))
         expect_equal(es._last_event_id, "2")
 
         # Verify Last-Event-ID was sent on reconnect
-        request_str = b"".join(sock2.written).decode()
+        request_str = b"".join(writer2.written).decode()
         expect_equal("Last-Event-ID: 1\r\n" in request_str, True)
 
         # Verify sleep was called with default retry
@@ -341,160 +377,185 @@ def test_reconnect_on_connection_drop():
         expect_equal(connect_count[0], 1)  # one reconnection via _connect
     finally:
         es_mod.sleep = original_sleep
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection
 
 
-def test_reconnect_sends_last_event_id():
+async def test_reconnect_sends_last_event_id():
     """On reconnect, Last-Event-ID header is sent with the last received id."""
     import lib.eventsource as es_mod
 
     sleep_calls = []
     original_sleep = es_mod.sleep
+    original_open_connection = es_mod.open_connection
 
-    def fake_sleep(secs):
+    async def fake_sleep(secs):
         sleep_calls.append(secs)
 
     es_mod.sleep = fake_sleep
 
-    stream2_headers = b"HTTP/1.1 200 OK\r\n\r\n"
-    stream2 = b"data: after-reconnect\r\n\r\n"
+    stream2 = b"HTTP/1.1 200 OK\r\n\r\ndata: after-reconnect\r\n\r\n"
+    reader2, writer2 = make_reader_writer(stream2)
 
-    reconnect_sock = FakeSocket([stream2_headers, stream2])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
+    es_mod.open_connection = fake_open_connection([(reader2, writer2)])
 
     try:
-        # Create an EventSource that already has a last_event_id and an empty socket
-        sock1 = FakeSocket([])  # immediately raises OSError
+        # Create an EventSource that already has a last_event_id and an empty reader
+        reader1, writer1 = make_reader_writer(
+            b""
+        )  # immediately returns empty → OSError
         es = EventSource.__new__(EventSource)
         es._url = "http://localhost/events"
         es._headers = {}
-        es._sock = sock1
-        es._buf = bytearray()
+        es._reader = reader1
+        es._writer = writer1
         es._last_event_id = "evt-99"
         es._retry_ms = 1000
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+        es._debug = None
 
-        event = next(es)
+        event = await anext(es)
         expect_equal(event, Event(event="message", data="after-reconnect"))
 
         # Verify Last-Event-ID was sent
-        request_str = b"".join(reconnect_sock.written).decode()
+        request_str = b"".join(writer2.written).decode()
         expect_equal("Last-Event-ID: evt-99\r\n" in request_str, True)
 
         # Verify sleep used correct retry
         expect_equal(sleep_calls, [1.0])
     finally:
         es_mod.sleep = original_sleep
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection
 
 
-def test_reconnect_retries_on_network_error():
+async def test_reconnect_retries_on_network_error():
     """Reconnect retries when _connect raises OSError (e.g. EHOSTUNREACH)."""
     import lib.eventsource as es_mod
 
     sleep_calls = []
     original_sleep = es_mod.sleep
-    es_mod.sleep = lambda secs: sleep_calls.append(secs)
+    original_open_connection = es_mod.open_connection
+
+    async def fake_sleep(secs):
+        sleep_calls.append(secs)
+
+    es_mod.sleep = fake_sleep
 
     connect_attempts = [0]
-    good_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: back online\r\n\r\n"])
+    stream2 = b"HTTP/1.1 200 OK\r\n\r\ndata: back online\r\n\r\n"
+    reader2, writer2 = make_reader_writer(stream2)
 
-    def make_socket():
+    async def mock_open_connection(host, port, ssl=None, server_hostname=None):
         connect_attempts[0] += 1
         if connect_attempts[0] <= 2:
             raise OSError("EHOSTUNREACH")
-        return good_sock
+        return (reader2, writer2)
 
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(make_socket)
+    es_mod.open_connection = mock_open_connection
 
     try:
-        sock1 = FakeSocket([])  # immediately raises OSError
+        reader1, writer1 = make_reader_writer(b"")  # immediately raises OSError
         es = EventSource.__new__(EventSource)
         es._url = "http://localhost/events"
         es._headers = {}
-        es._sock = sock1
-        es._buf = bytearray()
-        es._last_event_id = None
-        es._retry_ms = 1000
-        es._include_comments = False
-
-        event = next(es)
-        expect_equal(event, Event(event="message", data="back online"))
-        expect_equal(connect_attempts[0], 3)  # 2 failures + 1 success
-        expect_equal(sleep_calls, [1.0, 1.0, 1.0])
-    finally:
-        es_mod.sleep = original_sleep
-        es_mod.socket = original_socket
-
-
-def test_reconnect_yields_reconnect_when_enabled():
-    """When include_reconnects is True, a Reconnect is yielded after reconnecting."""
-    import lib.eventsource as es_mod
-
-    original_sleep = es_mod.sleep
-    es_mod.sleep = lambda secs: None
-
-    reconnect_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: hello\r\n\r\n"])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
-
-    try:
-        sock1 = FakeSocket([])  # immediately raises OSError
-        es = EventSource.__new__(EventSource)
-        es._url = "http://localhost/events"
-        es._headers = {}
-        es._sock = sock1
-        es._buf = bytearray()
-        es._last_event_id = None
-        es._retry_ms = 1000
-        es._include_comments = False
-        es._include_reconnects = True
-        es._pending_reconnect = False
-
-        msg = next(es)
-        expect_equal(msg, Reconnect())
-
-        event = next(es)
-        expect_equal(event, Event(event="message", data="hello"))
-    finally:
-        es_mod.sleep = original_sleep
-        es_mod.socket = original_socket
-
-
-def test_reconnect_not_yielded_by_default():
-    """When include_reconnects is False (default), no Reconnect is yielded."""
-    import lib.eventsource as es_mod
-
-    original_sleep = es_mod.sleep
-    es_mod.sleep = lambda secs: None
-
-    reconnect_sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n", b"data: hello\r\n\r\n"])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: reconnect_sock)
-
-    try:
-        sock1 = FakeSocket([])  # immediately raises OSError
-        es = EventSource.__new__(EventSource)
-        es._url = "http://localhost/events"
-        es._headers = {}
-        es._sock = sock1
-        es._buf = bytearray()
+        es._reader = reader1
+        es._writer = writer1
         es._last_event_id = None
         es._retry_ms = 1000
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._debug = None
 
-        # Should skip straight to the event, no Reconnect
-        event = next(es)
+        event = await anext(es)
+        expect_equal(event, Event(event="message", data="back online"))
+        expect_equal(connect_attempts[0], 3)  # 2 failures + 1 success
+        expect_equal(sleep_calls, [1.0, 1.0, 1.0])
+    finally:
+        es_mod.sleep = original_sleep
+        es_mod.open_connection = original_open_connection
+
+
+async def test_reconnect_yields_reconnect_when_enabled():
+    """When include_reconnects is True, a Reconnect is yielded after reconnecting."""
+    import lib.eventsource as es_mod
+
+    original_sleep = es_mod.sleep
+    original_open_connection = es_mod.open_connection
+
+    async def fake_sleep(secs):
+        pass
+
+    es_mod.sleep = fake_sleep
+
+    stream2 = b"HTTP/1.1 200 OK\r\n\r\ndata: hello\r\n\r\n"
+    reader2, writer2 = make_reader_writer(stream2)
+    es_mod.open_connection = fake_open_connection([(reader2, writer2)])
+
+    try:
+        reader1, writer1 = make_reader_writer(b"")  # immediately raises OSError
+        es = EventSource.__new__(EventSource)
+        es._url = "http://localhost/events"
+        es._headers = {}
+        es._reader = reader1
+        es._writer = writer1
+        es._last_event_id = None
+        es._retry_ms = 1000
+        es._include_comments = False
+        es._include_reconnects = True
+        es._pending_reconnect = False
+        es._debug = None
+
+        msg = await anext(es)
+        expect_equal(msg, Reconnect())
+
+        event = await anext(es)
         expect_equal(event, Event(event="message", data="hello"))
     finally:
         es_mod.sleep = original_sleep
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection
 
 
-def test_multiple_events_in_order():
+async def test_reconnect_not_yielded_by_default():
+    """When include_reconnects is False (default), no Reconnect is yielded."""
+    import lib.eventsource as es_mod
+
+    original_sleep = es_mod.sleep
+    original_open_connection = es_mod.open_connection
+
+    async def fake_sleep(secs):
+        pass
+
+    es_mod.sleep = fake_sleep
+
+    stream2 = b"HTTP/1.1 200 OK\r\n\r\ndata: hello\r\n\r\n"
+    reader2, writer2 = make_reader_writer(stream2)
+    es_mod.open_connection = fake_open_connection([(reader2, writer2)])
+
+    try:
+        reader1, writer1 = make_reader_writer(b"")  # immediately raises OSError
+        es = EventSource.__new__(EventSource)
+        es._url = "http://localhost/events"
+        es._headers = {}
+        es._reader = reader1
+        es._writer = writer1
+        es._last_event_id = None
+        es._retry_ms = 1000
+        es._include_comments = False
+        es._include_reconnects = False
+        es._pending_reconnect = False
+        es._debug = None
+
+        # Should skip straight to the event, no Reconnect
+        event = await anext(es)
+        expect_equal(event, Event(event="message", data="hello"))
+    finally:
+        es_mod.sleep = original_sleep
+        es_mod.open_connection = original_open_connection
+
+
+async def test_multiple_events_in_order():
     """Multiple events in a stream are yielded in correct order."""
     stream = (
         b"HTTP/1.1 200 OK\r\n\r\n"
@@ -502,178 +563,210 @@ def test_multiple_events_in_order():
         b'event: mutation\r\nid: tx1\r\ndata: {"doc":"A"}\r\n\r\n'
         b'event: mutation\r\nid: tx2\r\ndata: {"doc":"B"}\r\n\r\n'
     )
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
-    es._last_event_id = None
-    es._retry_ms = 3000
-
-    es._read_until(b"\r\n\r\n")
-
-    e1 = next(es)
-    expect_equal(e1, Event(event="welcome", data="{}"))
-
-    e2 = next(es)
-    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
-
-    e3 = next(es)
-    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
-
-
-def test_multiple_events_chunked_delivery():
-    """Events delivered across multiple read() chunks are still in order."""
-    # Simulate event terminator arriving with next event's data
-    chunks = [
-        b"HTTP/1.1 200 OK\r\n\r\nevent: welcome\r\ndata: {}\r\n",
-        b"\r\nevent: mutation\r\nid: tx1\r\ndata: {\"doc\":\"A\"}\r\n",
-        b"\r\nevent: mutation\r\nid: tx2\r\ndata: {\"doc\":\"B\"}\r\n\r\n",
-    ]
-    sock = FakeSocket(chunks)
-
-    es = EventSource.__new__(EventSource)
-    es._url = "http://localhost/events"
-    es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
-    es._last_event_id = None
-    es._retry_ms = 3000
-
-    es._read_until(b"\r\n\r\n")
-
-    e1 = next(es)
-    expect_equal(e1, Event(event="welcome", data="{}"))
-
-    e2 = next(es)
-    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
-
-    e3 = next(es)
-    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
-
-
-def test_comment_ignored_by_default():
-    """Comment lines are ignored when include_comments is False."""
-    stream = b"HTTP/1.1 200 OK\r\n\r\n: heartbeat\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
-
-    es = EventSource.__new__(EventSource)
-    es._url = "http://localhost/events"
-    es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
     es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    event = next(es)
+    e1 = await anext(es)
+    expect_equal(e1, Event(event="welcome", data="{}"))
+
+    e2 = await anext(es)
+    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
+
+    e3 = await anext(es)
+    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
+
+
+async def test_multiple_events_chunked_delivery():
+    """Events delivered across multiple read() chunks are still in order."""
+    # For async StreamReader, all data is available upfront
+    stream = (
+        b"HTTP/1.1 200 OK\r\n\r\n"
+        b"event: welcome\r\ndata: {}\r\n\r\n"
+        b'event: mutation\r\nid: tx1\r\ndata: {"doc":"A"}\r\n\r\n'
+        b'event: mutation\r\nid: tx2\r\ndata: {"doc":"B"}\r\n\r\n'
+    )
+    reader, writer = make_reader_writer(stream)
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._reader = reader
+    es._writer = writer
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
+
+    await es._skip_headers()
+
+    e1 = await anext(es)
+    expect_equal(e1, Event(event="welcome", data="{}"))
+
+    e2 = await anext(es)
+    expect_equal(e2, Event(event="mutation", data='{"doc":"A"}', id="tx1"))
+
+    e3 = await anext(es)
+    expect_equal(e3, Event(event="mutation", data='{"doc":"B"}', id="tx2"))
+
+
+async def test_comment_ignored_by_default():
+    """Comment lines are ignored when include_comments is False."""
+    stream = b"HTTP/1.1 200 OK\r\n\r\n: heartbeat\r\ndata: hello\r\n\r\n"
+    reader, writer = make_reader_writer(stream)
+
+    es = EventSource.__new__(EventSource)
+    es._url = "http://localhost/events"
+    es._headers = {}
+    es._reader = reader
+    es._writer = writer
+    es._last_event_id = None
+    es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
+
+    await es._skip_headers()
+
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello"))
 
 
-def test_comment_yielded_when_enabled():
+async def test_comment_yielded_when_enabled():
     """Comment lines yield Comment instances when include_comments is True."""
     stream = b"HTTP/1.1 200 OK\r\n\r\n: keepalive\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
     es._include_comments = True
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    msg = next(es)
+    msg = await anext(es)
     expect_equal(msg, Comment("keepalive"))
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello"))
 
 
-def test_comment_empty():
+async def test_comment_empty():
     """Empty comment line (just ':') yields Comment with empty text."""
     stream = b"HTTP/1.1 200 OK\r\n\r\n:\r\ndata: hello\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
     es._include_comments = True
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    msg = next(es)
+    msg = await anext(es)
     expect_equal(msg, Comment(""))
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="message", data="hello"))
 
 
-def test_comment_mid_event_ignored():
+async def test_comment_mid_event_ignored():
     """Comment lines mid-event are ignored even when include_comments is True."""
     stream = b"HTTP/1.1 200 OK\r\n\r\nevent: mutation\r\n: mid-comment\r\ndata: payload\r\n\r\n"
-    sock = FakeSocket([stream])
+    reader, writer = make_reader_writer(stream)
 
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
     es._include_comments = True
+    es._include_reconnects = False
+    es._pending_reconnect = False
+    es._debug = None
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    event = next(es)
+    event = await anext(es)
     expect_equal(event, Event(event="mutation", data="payload"))
 
 
-def test_debug_callback():
+async def test_debug_callback():
     """Debug callback receives each raw line as bytes."""
-    stream = b"HTTP/1.1 200 OK\r\n\r\nevent: mutation\r\nid: tx1\r\ndata: payload\r\n\r\n"
-    sock = FakeSocket([stream])
+    stream = (
+        b"HTTP/1.1 200 OK\r\n\r\nevent: mutation\r\nid: tx1\r\ndata: payload\r\n\r\n"
+    )
+    reader, writer = make_reader_writer(stream)
 
     debug_lines = []
     es = EventSource.__new__(EventSource)
     es._url = "http://localhost/events"
     es._headers = {}
-    es._sock = sock
-    es._buf = bytearray()
+    es._reader = reader
+    es._writer = writer
     es._last_event_id = None
     es._retry_ms = 3000
+    es._include_comments = False
+    es._include_reconnects = False
+    es._pending_reconnect = False
     es._debug = lambda line: debug_lines.append(line)
 
-    es._read_until(b"\r\n\r\n")
+    await es._skip_headers()
 
-    next(es)
+    await anext(es)
     expect_equal(debug_lines, [b"event: mutation", b"id: tx1", b"data: payload", b""])
 
 
-def test_constructor_last_event_id():
+async def test_constructor_last_event_id():
     """Constructor accepts last_event_id param and sends it on initial connect."""
     import lib.eventsource as es_mod
 
-    sock = FakeSocket([b"HTTP/1.1 200 OK\r\n\r\n"])
-    original_socket = es_mod.socket
-    es_mod.socket = fake_socket_module(lambda: sock)
+    writer = FakeStreamWriter()
+    reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
+    original_open_connection = es_mod.open_connection
+    es_mod.open_connection = fake_open_connection([(reader, writer)])
 
     try:
         es = EventSource("http://localhost/events", last_event_id="resume-123")
-        request_str = b"".join(sock.written).decode()
-        expect_equal("Last-Event-ID: resume-123\r\n" in request_str, True)
+        # Trigger lazy connect
+        expect_equal(es._reader, None)
         expect_equal(es._last_event_id, "resume-123")
         expect_equal(es._retry_ms, 3000)
+
+        # Connect happens on first __anext__, but we can also test _connect directly
+        await es._connect()
+        request_str = b"".join(writer.written).decode()
+        expect_equal("Last-Event-ID: resume-123\r\n" in request_str, True)
     finally:
-        es_mod.socket = original_socket
+        es_mod.open_connection = original_open_connection

@@ -102,6 +102,7 @@ print(res.json)
 ### Listen for real-time updates
 
 ```python
+import asyncio
 import json
 from usanity import listen_request
 from usanity.eventsource import EventSource
@@ -116,17 +117,24 @@ url, headers = listen_request(
     include_result=True,
 )
 
-for event in EventSource(url, headers):
-    if event.event == "mutation":
-        data = json.loads(event.data)
-        print("Document changed:", data["documentId"])
-        print("Result:", data.get("result"))
+async def main():
+    async for event in EventSource(url, headers):
+        if event.event == "mutation":
+            data = json.loads(event.data)
+            print("Document changed:", data["documentId"])
+            print("Result:", data.get("result"))
+
+asyncio.run(main())
 ```
 
 The `EventSource` automatically reconnects on connection drops, sending the `Last-Event-ID` header so the server can resume the stream. To resume from a known position:
 
 ```python
-es = EventSource(url, headers, last_event_id="<last known event id>")
+from usanity.http.eventsource import EventSource
+
+es = EventSource(url, headers, last_event_id="last-known-event-id")
+async for event in es:
+    ...
 ```
 
 ## License

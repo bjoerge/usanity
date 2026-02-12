@@ -1,3 +1,4 @@
+import asyncio
 from test_helpers import TestError
 import test_query
 import test_mutation
@@ -10,7 +11,9 @@ for test_module in test_modules:
     for name, test in test_module.__dict__.items():
         if name.startswith("test_") and callable(test):
             try:
-                test()
+                result = test()
+                if result is not None and hasattr(result, "__await__"):
+                    asyncio.run(result)
                 print(f"PASS {name}")
             except TestError as e:
                 print(f"FAIL {name}: {e}")
