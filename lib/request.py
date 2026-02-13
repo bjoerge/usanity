@@ -1,5 +1,5 @@
 from .constants import USER_AGENT
-from .utils import encode_uri_component, merge
+from .utils import encode_uri_component
 
 
 def base_url(project_id: str, use_cdn: bool = False, api_host: str = None):
@@ -85,10 +85,14 @@ def query_request(
                 f'Query parameters dictionary can not include keys starting with "$" (found "{key}")'
             )
 
-    qs = merge(
-        merge(params or {}, variables_to_query_params(variables or {})),
-        {"query": query, "returnQuery": "true" if return_query else "false"},
-    )
+    qs = {}
+    if params:
+        qs.update(params)
+    if variables:
+        qs.update(variables_to_query_params(variables))
+    qs["query"] = query
+    if return_query:
+        qs["returnQuery"] = "true"
 
     return (
         build_url(
@@ -148,10 +152,10 @@ def listen_request(
     effect_format: str = None,
     tag: str = None,
 ):
-    qs = merge(
-        variables_to_query_params(variables or {}),
-        {"query": f"*[{filter}]", "enableResume": "true"}
-    )
+    qs = {}
+    if variables:
+        qs.update(variables_to_query_params(variables))
+    qs["query"] = f"*[{filter}]"
 
     if include_result:
         qs["includeResult"] = "true"

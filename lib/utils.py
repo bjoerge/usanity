@@ -4,24 +4,16 @@ def merge(x: dict, y: dict):
     return z
 
 
+_HEX = b"0123456789abcdef"
+
+
 def encode_uri_component(uri_component: str):
-    return "".join(
-        [
-            character
-            if character.isalpha()
-            or character.isdigit()
-            or character == "-"
-            or character == "."
-            else "%" + hex(ord(character))[2:]
-            for character in uri_component
-        ]
-    )
-
-
-def encode_params(params: dict):
-    return "&".join(
-        [
-            f"{key}={encode_uri_component(value)}" if value is not None else key
-            for (key, value) in params.items()
-        ]
-    )
+    result = bytearray()
+    for b in uri_component.encode():
+        if (0x41 <= b <= 0x5A) or (0x61 <= b <= 0x7A) or (0x30 <= b <= 0x39) or b == 0x2D or b == 0x2E:
+            result.append(b)
+        else:
+            result.append(0x25)  # %
+            result.append(_HEX[b >> 4])
+            result.append(_HEX[b & 0x0F])
+    return result.decode()
