@@ -1,3 +1,5 @@
+# Based on
+# https://github.com/StevenRuest/async_urequests/blob/master/async_urequests.py
 import uasyncio as asyncio
 
 HTTP__version__ = "1.1"
@@ -57,6 +59,7 @@ class Response:
 
     def json(self):
         import ujson
+
         return ujson.loads(self.content)
 
     def close(self):
@@ -95,11 +98,17 @@ async def _request_raw(method, url, headers, data, json):
     if json is not None:
         assert data is None
         import ujson
+
         data = ujson.dumps(json)
 
     parts = [
-        method, " /", path, " HTTP/", HTTP__version__,
-        "\r\nHost: ", host,
+        method,
+        " /",
+        path,
+        " HTTP/",
+        HTTP__version__,
+        "\r\nHost: ",
+        host,
         "\r\nConnection: close\r\n",
         headers,
     ]
@@ -136,7 +145,7 @@ async def _requests(method, url, data=None, headers={}, json=None):
             reason = sline[2].decode().rstrip()
         chunked = False
         resp_headers = []
-        charset = 'utf-8'
+        charset = "utf-8"
         # read headers
         while True:
             line = await reader.readline()

@@ -2,10 +2,12 @@
   "urls": [
     ["usanity/__init__.py", "github:bjoerge/usanity/lib/__init__.py"],
     ["usanity/mutations.py", "github:bjoerge/usanity/lib/mutations.py"],
-    ["usanity/request.py", "github:bjoerge/usanity/lib/request.py"],
+    ["usanity/endpoints.py", "github:bjoerge/usanity/lib/endpoints.py"],
     ["usanity/utils.py", "github:bjoerge/usanity/lib/utils.py"],
     ["usanity/constants.py", "github:bjoerge/usanity/lib/constants.py"],
-    ["usanity/eventsource.py", "github:bjoerge/usanity/lib/eventsource.py"]
+    ["usanity/http/__init__.py", "github:bjoerge/usanity/lib/http/__init__.py"],
+    ["usanity/http/eventsource.py", "github:bjoerge/usanity/lib/http/eventsource.py"],
+    ["usanity/http/async_urequests.py", "github:bjoerge/usanity/lib/http/async_urequests.py"]
   ],
   "version": "0.4"
 }

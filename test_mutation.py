@@ -1,5 +1,6 @@
+from lib.constants import USER_AGENT
+from lib.endpoints import mutate_request
 from lib.mutations import create_if_not_exists, patch, patch_set, insert, set_if_missing
-from lib.request import mutate_request
 from test_helpers import expect_equal
 from lib.constants import USER_AGENT
 

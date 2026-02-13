@@ -1,9 +1,9 @@
-from lib import request
+from lib import endpoints
 from test_helpers import expect_equal
 
 
 def test_listen():
-    url, headers = request.listen_request(
+    url, headers = endpoints.listen_request(
         '_type == "sensor" && _id == $id',
         variables={"id": "temperature-xyz"},
         project_id="abc",
@@ -20,7 +20,7 @@ def test_listen():
 
 
 def test_listen_with_options():
-    url, headers = request.listen_request(
+    url, headers = endpoints.listen_request(
         '_type == "post"',
         project_id="abc",
         dataset="production",

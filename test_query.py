@@ -1,9 +1,9 @@
-from lib import request
+from lib import endpoints
 from test_helpers import expect_equal
 
 
 def test_query():
-    url, headers = request.query_request(
+    url, headers = endpoints.query_request(
         '*[_type == "sensor" && _id == $id && value < $threshold][0...$limit && isActive=$active]',
         variables={"id": "temperature-xyz", "limit": 100, "isActive": True, "threshold": 0.052},
         project_id="abc",
@@ -20,7 +20,7 @@ def test_query():
 
 
 def test_query_use_cdn():
-    url, headers = request.query_request(
+    url, headers = endpoints.query_request(
         "*[_type == 'sensor' && _id == $id]",
         variables={"id": "temperature-xyz"},
         project_id="abc",
@@ -36,7 +36,7 @@ def test_query_use_cdn():
 
 
 def test_with_token():
-    _, headers = request.query_request(
+    _, headers = endpoints.query_request(
         "*[_type == 'sensor'",
         project_id="abc",
         dataset="iot",

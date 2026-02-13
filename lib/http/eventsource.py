@@ -196,7 +196,9 @@ class EventSource:
                 if data_parts:
                     eid = event_id.decode() if event_id is not None else None
                     event = Event(
-                        event=event_type.decode() if event_type is not None else "message",
+                        event=(
+                            event_type.decode() if event_type is not None else "message"
+                        ),
                         data=b"\n".join(data_parts).decode(),
                         id=eid,
                     )

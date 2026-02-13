@@ -105,7 +105,7 @@ print(res.json)
 import asyncio
 import json
 from usanity import listen_request
-from usanity.eventsource import EventSource
+from usanity.http.eventsource import EventSource
 
 url, headers = listen_request(
     "_type == 'sensor' && sensorType == $type",

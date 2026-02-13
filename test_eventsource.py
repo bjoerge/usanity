@@ -1,4 +1,11 @@
-from lib.eventsource import Comment, Event, EventSource, Reconnect, parse_sse_lines, parse_url
+from lib.http.eventsource import (
+    Comment,
+    Event,
+    EventSource,
+    Reconnect,
+    parse_sse_lines,
+    parse_url,
+)
 from test_helpers import expect_equal
 
 
@@ -257,7 +264,7 @@ async def test_retry_field_updates_retry_ms():
 
 async def test_last_event_id_header_sent_on_connect():
     """_connect sends Last-Event-ID header when _last_event_id is set."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     writer = FakeStreamWriter()
     reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
@@ -287,7 +294,7 @@ async def test_last_event_id_header_sent_on_connect():
 
 async def test_no_last_event_id_header_when_none():
     """_connect does not send Last-Event-ID header when _last_event_id is None."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     writer = FakeStreamWriter()
     reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
@@ -316,7 +323,7 @@ async def test_no_last_event_id_header_when_none():
 
 async def test_reconnect_on_connection_drop():
     """EventSource reconnects after connection drops and continues reading events."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     # Track sleep calls and connection count
     sleep_calls = []
@@ -382,7 +389,7 @@ async def test_reconnect_on_connection_drop():
 
 async def test_reconnect_sends_last_event_id():
     """On reconnect, Last-Event-ID header is sent with the last received id."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     sleep_calls = []
     original_sleep = es_mod.sleep
@@ -431,7 +438,7 @@ async def test_reconnect_sends_last_event_id():
 
 async def test_reconnect_retries_on_network_error():
     """Reconnect retries when _connect raises OSError (e.g. EHOSTUNREACH)."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     sleep_calls = []
     original_sleep = es_mod.sleep
@@ -479,7 +486,7 @@ async def test_reconnect_retries_on_network_error():
 
 async def test_reconnect_yields_reconnect_when_enabled():
     """When include_reconnects is True, a Reconnect is yielded after reconnecting."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     original_sleep = es_mod.sleep
     original_open_connection = es_mod.open_connection
@@ -519,7 +526,7 @@ async def test_reconnect_yields_reconnect_when_enabled():
 
 async def test_reconnect_not_yielded_by_default():
     """When include_reconnects is False (default), no Reconnect is yielded."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     original_sleep = es_mod.sleep
     original_open_connection = es_mod.open_connection
@@ -750,7 +757,7 @@ async def test_debug_callback():
 
 async def test_constructor_last_event_id():
     """Constructor accepts last_event_id param and sends it on initial connect."""
-    import lib.eventsource as es_mod
+    import lib.http.eventsource as es_mod
 
     writer = FakeStreamWriter()
     reader = FakeStreamReader(b"HTTP/1.1 200 OK\r\n\r\n")
