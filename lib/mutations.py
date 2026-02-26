@@ -1,7 +1,7 @@
 # Mutation helpers
 # --- Mutations ---
 def create_or_replace(document: dict):
-    return {"createIfNotExists": document}
+    return {"createOrReplace": document}
 
 
 def create_if_not_exists(document: dict):
