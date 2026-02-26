@@ -1,6 +1,6 @@
 import os
 
-VERSION = 0.4
+VERSION = "1.0.0"
 
 [sysname, _, _, _, machine] = os.uname()
 
