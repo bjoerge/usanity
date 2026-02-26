@@ -1,16 +1,25 @@
 # µsanity
-[MicroPython](https://micropython.org/) client for [Sanity.io](https://www.sanity.io/)
+
+A [MicroPython](https://micropython.org/) client for [Sanity.io](https://www.sanity.io/) — query, mutate, and listen to your content lake directly from microcontrollers.
+
+## Features
+
+- **Sync and async clients** — use with `urequests` or `uasyncio`
+- **Real-time listening** — subscribe to document changes via Server-Sent Events
+- **Mutation helpers** — `create`, `patch`, `delete`, `insert`, and more
+- **Tiny footprint** — designed for microcontrollers with limited RAM
+- **Pluggable HTTP** — bring your own HTTP backend if needed
 
 ## Install
 
-If you're connected to the REPL and connected to Wi-Fi, the easiest way to install is by running the following:
+From the MicroPython REPL (with Wi-Fi connected):
 
 ```python
 import mip
 mip.install("github:bjoerge/usanity")
 ```
 
-More info about the MicroPython package manager and alternative ways to install here: https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip
+See the [MicroPython package docs](https://docs.micropython.org/en/latest/reference/packages.html#installing-packages-with-mip) for alternative install methods.
 
 ## Quick start
 
@@ -117,7 +126,7 @@ client = SanityClient(
 )
 ```
 
-### Low-level API
+## Low-level API
 
 If you prefer full control over HTTP requests, use the request-builder functions directly. They return `(url, headers)` or `(url, headers, body)` tuples that you pass to your HTTP library of choice.
 
@@ -137,7 +146,7 @@ url, headers = query_request(
     use_cdn=True,
 )
 res = urequests.get(url, headers=headers)
-print(res.json()['result'])
+print(res.json()["result"])
 ```
 
 ### Mutate
@@ -148,7 +157,6 @@ from usanity import mutate_request
 from usanity.mutations import (
     create_if_not_exists,
     patch,
-    # set is a builtin, so use patch_set instead
     patch_set,
     set_if_missing,
     insert,
