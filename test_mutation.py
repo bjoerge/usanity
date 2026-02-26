@@ -31,7 +31,7 @@ def test_query_mutation():
         token="abcxyz",
     )
 
-    expect_equal(url, "https://abc.api.sanity.io/v2023-03-10/data/mutate/iot")
+    expect_equal(url, "https://abc.api.sanity.io/v2026-02-26/data/mutate/iot")
     expect_equal(headers, {"User-Agent": USER_AGENT, "Authorization": "Bearer abcxyz"})
     expect_equal(
         body,

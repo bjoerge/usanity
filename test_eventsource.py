@@ -11,11 +11,11 @@ from test_helpers import expect_equal
 
 def test_parse_url_https():
     host, port, path, use_ssl = parse_url(
-        "https://abc.api.sanity.io/v2023-03-10/data/listen/production?query=*"
+        "https://abc.api.sanity.io/v2026-02-26/data/listen/production?query=*"
     )
     expect_equal(host, "abc.api.sanity.io")
     expect_equal(port, 443)
-    expect_equal(path, "/v2023-03-10/data/listen/production?query=*")
+    expect_equal(path, "/v2026-02-26/data/listen/production?query=*")
     expect_equal(use_ssl, True)
 
 
