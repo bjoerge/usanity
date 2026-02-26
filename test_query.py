@@ -5,7 +5,12 @@ from test_helpers import expect_equal
 def test_query():
     url, headers = endpoints.query_request(
         '*[_type == "sensor" && _id == $id && value < $threshold][0...$limit && isActive=$active]',
-        variables={"id": "temperature-xyz", "limit": 100, "isActive": True, "threshold": 0.052},
+        variables={
+            "id": "temperature-xyz",
+            "limit": 100,
+            "isActive": True,
+            "threshold": 0.052,
+        },
         project_id="abc",
         dataset="iot",
         api_version="2023-03-10",
