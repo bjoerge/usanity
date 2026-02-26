@@ -92,7 +92,16 @@ class EventSource:
     _pending_reconnect = False
     _debug = None
 
-    def __init__(self, url, headers=None, last_event_id=None, include_comments=False, include_reconnects=False, debug=None):
+    def __init__(
+        self,
+        url,
+        headers=None,
+        last_event_id=None,
+        include_comments=False,
+        include_reconnects=False,
+        max_retries=None,
+        debug=None,
+    ):
         self._url = url
         self._headers = headers or {}
         self._reader = None
@@ -102,6 +111,7 @@ class EventSource:
         self._include_comments = include_comments
         self._include_reconnects = include_reconnects
         self._pending_reconnect = False
+        self._max_retries = max_retries
         self._debug = debug
 
     async def _connect(self):
@@ -134,6 +144,18 @@ class EventSource:
         await self._skip_headers()
 
     async def _skip_headers(self):
+        # Read and check status line
+        status_line = await self._reader.readline()
+        if not status_line:
+            raise OSError("Connection closed")
+        parts = status_line.split(None, 2)
+        if len(parts) < 2:
+            raise OSError("Malformed HTTP status line")
+        status_code = int(parts[1])
+        if status_code != 200:
+            reason = parts[2].decode().strip() if len(parts) > 2 else ""
+            raise OSError("HTTP %d %s" % (status_code, reason))
+        # Skip remaining headers
         while True:
             line = await self._reader.readline()
             if not line:
@@ -237,13 +259,17 @@ class EventSource:
                 pass
             self._writer = None
         self._reader = None
+        attempts = 0
         while True:
-            await sleep(self._retry_ms / 1000)
+            delay = min(self._retry_ms * (2**attempts) / 1000, 60)
+            await sleep(delay)
+            attempts += 1
             try:
                 await self._connect()
                 return
             except OSError:
-                pass
+                if self._max_retries is not None and attempts >= self._max_retries:
+                    raise
 
     def close(self):
         if self._writer:

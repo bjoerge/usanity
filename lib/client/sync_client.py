@@ -1,4 +1,4 @@
-from lib.endpoints import query_request, mutate_request, doc_request
+from ..endpoints import query_request, mutate_request, doc_request
 
 
 class SanityClient:

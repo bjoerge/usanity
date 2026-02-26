@@ -204,6 +204,7 @@ async def test_last_event_id_tracked():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     # Skip headers
@@ -229,6 +230,7 @@ async def test_last_event_id_not_updated_without_id():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -253,6 +255,7 @@ async def test_retry_field_updates_retry_ms():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -282,6 +285,7 @@ async def test_last_event_id_header_sent_on_connect():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
         await es._connect()
 
@@ -312,6 +316,7 @@ async def test_no_last_event_id_header_when_none():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
         await es._connect()
 
@@ -363,6 +368,7 @@ async def test_reconnect_on_connection_drop():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
 
         # First event
@@ -420,6 +426,7 @@ async def test_reconnect_sends_last_event_id():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
 
         event = await anext(es)
@@ -473,12 +480,13 @@ async def test_reconnect_retries_on_network_error():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
 
         event = await anext(es)
         expect_equal(event, Event(event="message", data="back online"))
         expect_equal(connect_attempts[0], 3)  # 2 failures + 1 success
-        expect_equal(sleep_calls, [1.0, 1.0, 1.0])
+        expect_equal(sleep_calls, [1.0, 2.0, 4.0])
     finally:
         es_mod.sleep = original_sleep
         es_mod.open_connection = original_open_connection
@@ -512,6 +520,7 @@ async def test_reconnect_yields_reconnect_when_enabled():
         es._include_comments = False
         es._include_reconnects = True
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
 
         msg = await anext(es)
@@ -552,6 +561,7 @@ async def test_reconnect_not_yielded_by_default():
         es._include_comments = False
         es._include_reconnects = False
         es._pending_reconnect = False
+        es._max_retries = None
         es._debug = None
 
         # Should skip straight to the event, no Reconnect
@@ -582,6 +592,7 @@ async def test_multiple_events_in_order():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -617,6 +628,7 @@ async def test_multiple_events_chunked_delivery():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -646,6 +658,7 @@ async def test_comment_ignored_by_default():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -669,6 +682,7 @@ async def test_comment_yielded_when_enabled():
     es._include_comments = True
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -695,6 +709,7 @@ async def test_comment_empty():
     es._include_comments = True
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -721,6 +736,7 @@ async def test_comment_mid_event_ignored():
     es._include_comments = True
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = None
 
     await es._skip_headers()
@@ -747,6 +763,7 @@ async def test_debug_callback():
     es._include_comments = False
     es._include_reconnects = False
     es._pending_reconnect = False
+    es._max_retries = None
     es._debug = lambda line: debug_lines.append(line)
 
     await es._skip_headers()

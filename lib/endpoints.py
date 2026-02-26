@@ -24,9 +24,30 @@ def doc_endpoint(api_version: str, dataset: str, document_ids: list):
     return versioned_path(api_version) + f"/data/doc/{dataset}/{','.join(document_ids)}"
 
 
+_ESCAPE = {
+    ord("\\"): "\\\\",
+    ord('"'): '\\"',
+    ord("\n"): "\\n",
+    ord("\r"): "\\r",
+    ord("\t"): "\\t",
+}
+
+
+def _escape_string(s):
+    for c in s:
+        if ord(c) in _ESCAPE:
+            # Only allocate when there's something to escape
+            parts = []
+            for c2 in s:
+                e = _ESCAPE.get(ord(c2))
+                parts.append(e if e else c2)
+            return "".join(parts)
+    return s
+
+
 def serialize_variable(value):
     if isinstance(value, str):
-        return f'"{value}"'
+        return f'"{_escape_string(value)}"'
     if isinstance(value, bool):
         return "true" if value else "false"
     return str(value)
@@ -188,7 +209,7 @@ def doc_request(
 ):
     params = {}
     if explain:
-        params["explain"] = explain
+        params["explain"] = "true"
     return (
         build_url(
             base_url(project_id, False),

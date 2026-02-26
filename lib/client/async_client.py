@@ -1,5 +1,5 @@
-from lib.endpoints import query_request, mutate_request, doc_request, listen_request
-from lib.http.eventsource import EventSource
+from ..endpoints import query_request, mutate_request, doc_request, listen_request
+from ..http.eventsource import EventSource
 
 
 class AsyncSanityClient:
@@ -24,7 +24,7 @@ class AsyncSanityClient:
     @property
     def requester(self):
         if self._requester is None:
-            from lib.http import async_urequests
+            from ..http import async_urequests
 
             self._requester = async_urequests
         return self._requester

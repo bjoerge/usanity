@@ -140,9 +140,10 @@ async def _requests(method, url, data=None, headers={}, json=None):
     try:
         sline = await reader.readline()
         sline = sline.split(None, 2)
+        if len(sline) < 2:
+            raise ValueError("Malformed HTTP status line")
         status_code = int(sline[1])
-        if len(sline) > 1:
-            reason = sline[2].decode().rstrip()
+        reason = sline[2].decode().rstrip() if len(sline) > 2 else ""
         chunked = False
         resp_headers = []
         charset = "utf-8"
