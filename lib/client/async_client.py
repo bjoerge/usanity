@@ -87,6 +87,8 @@ class AsyncSanityClient:
         visibility=None,
         effect_format=None,
         tag=None,
+        include_reconnects=False,
+        include_comments=False,
     ):
         url, headers = listen_request(
             groq_filter,
@@ -102,4 +104,9 @@ class AsyncSanityClient:
             effect_format=effect_format,
             tag=tag,
         )
-        return EventSource(url, headers=headers)
+        return EventSource(
+            url,
+            headers=headers,
+            include_reconnects=include_reconnects,
+            include_comments=include_comments,
+        )
