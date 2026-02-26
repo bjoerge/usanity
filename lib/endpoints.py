@@ -66,7 +66,7 @@ def build_url(base, endpoint, params):
 
 
 def query_request(
-    query: str,
+    groq: str,
     project_id: str,
     dataset: str,
     api_version: str,
@@ -90,7 +90,7 @@ def query_request(
         qs.update(params)
     if variables:
         qs.update(variables_to_query_params(variables))
-    qs["query"] = query
+    qs["query"] = groq
     if return_query:
         qs["returnQuery"] = "true"
 
@@ -119,11 +119,11 @@ def mutate_request(
     if visibility:
         params["visibility"] = visibility
     if return_documents:
-        params["return_documents"] = return_documents
+        params["returnDocuments"] = "true"
     if return_ids:
-        params["return_ids"] = return_ids
+        params["returnIds"] = "true"
     if dry_run:
-        params["dry_run"] = dry_run
+        params["dryRun"] = "true"
 
     return (
         build_url(

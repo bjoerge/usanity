@@ -7,7 +7,10 @@
     ["usanity/constants.py", "github:bjoerge/usanity/lib/constants.py"],
     ["usanity/http/__init__.py", "github:bjoerge/usanity/lib/http/__init__.py"],
     ["usanity/http/eventsource.py", "github:bjoerge/usanity/lib/http/eventsource.py"],
-    ["usanity/http/async_urequests.py", "github:bjoerge/usanity/lib/http/async_urequests.py"]
+    ["usanity/http/async_urequests.py", "github:bjoerge/usanity/lib/http/async_urequests.py"],
+    ["usanity/client/__init__.py", "github:bjoerge/usanity/lib/client/__init__.py"],
+    ["usanity/client/sync.py", "github:bjoerge/usanity/lib/client/sync_client.py"],
+    ["usanity/client/async_client.py", "github:bjoerge/usanity/lib/client/async_client.py"]
   ],
-  "version": "0.4"
+  "version": "0.5"
 }

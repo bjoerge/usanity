@@ -39,15 +39,15 @@ def unset(path: str):
     return {"unset": [path]}
 
 
-def inc(path: str, by: any):
+def inc(path: str, by: int):
     return {"inc": {path: by}}
 
 
-def dec(path: str, by: any):
+def dec(path: str, by: int):
     return {"dec": {path: by}}
 
 
-def format_array_selector(item_selector: str | int):
+def _format_array_selector(item_selector: str | int):
     return (
         f'[_key=="{item_selector}"]'
         if isinstance(item_selector, str)
@@ -64,7 +64,7 @@ def insert(
 ):
     return {
         "insert": {
-            position: path + format_array_selector(reference_selector),
+            position: path + _format_array_selector(reference_selector),
             "items": items,
         }
     }

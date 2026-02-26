@@ -1,11 +1,14 @@
 import asyncio
-from test_helpers import TestError
-import test_query
-import test_mutation
-import test_listen
-import test_eventsource
+import sys
 
-test_modules = [test_query, test_mutation, test_listen, test_eventsource]
+import test_client
+import test_eventsource
+import test_listen
+import test_mutation
+import test_query
+from test_helpers import TestError
+
+test_modules = [test_query, test_mutation, test_listen, test_eventsource, test_client]
 
 for test_module in test_modules:
     for name, test in test_module.__dict__.items():
