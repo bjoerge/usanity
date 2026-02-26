@@ -27,7 +27,7 @@ def test_query_mutation():
         mutations,
         project_id="abc",
         dataset="iot",
-        api_version="2023-03-10",
+        api_version="2026-02-26",
         token="abcxyz",
     )
 
