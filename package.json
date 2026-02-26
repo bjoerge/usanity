@@ -12,5 +12,5 @@
     ["usanity/client/sync_client.py", "github:bjoerge/usanity/lib/client/sync_client.py"],
     ["usanity/client/async_client.py", "github:bjoerge/usanity/lib/client/async_client.py"]
   ],
-  "version": "1.0.0"
+  "version": "1.0.1"
 }
